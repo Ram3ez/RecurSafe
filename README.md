@@ -1,4 +1,4 @@
-# recursafe
+# RecurSafe
 
 A new Flutter project.
 
