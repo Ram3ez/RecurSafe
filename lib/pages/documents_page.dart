@@ -12,6 +12,16 @@ class DocumentsPage extends StatelessWidget {
         slivers: [
           CupertinoSliverNavigationBar.search(
             largeTitle: Text("Documents"),
+            leading: CupertinoButton(
+              sizeStyle: CupertinoButtonSize.medium,
+              child: Text("Edit"),
+              onPressed: () {},
+            ),
+            trailing: CupertinoButton(
+              sizeStyle: CupertinoButtonSize.medium,
+              child: Icon(CupertinoIcons.add),
+              onPressed: () {},
+            ),
             searchField: SearchField(
               placeholder: "Search Document",
             ),

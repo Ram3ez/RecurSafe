@@ -11,7 +11,7 @@ import "package:recursafe/pages/settings_page.dart";
 void main() {
   runApp(
     DevicePreview(
-      enabled: /* !kReleaseMode */ false,
+      enabled: /* !kReleaseMode */ true,
       builder: (context) => MyApp(),
     ),
   );
