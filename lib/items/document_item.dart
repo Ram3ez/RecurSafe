@@ -12,11 +12,14 @@ class DocumentItem extends HiveObject {
   final int size; // Store size in bytes as an integer
   @HiveField(3)
   final DateTime addedOn;
+  @HiveField(4)
+  bool isLocked; // Add isLocked field
 
   DocumentItem({
     required this.name,
     required this.path,
     required this.size,
     required this.addedOn,
+    this.isLocked = false, // Default to not locked
   });
 }

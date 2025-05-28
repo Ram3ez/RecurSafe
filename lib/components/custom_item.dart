@@ -1,7 +1,10 @@
 import "package:flutter/cupertino.dart";
 import "package:intl/intl.dart";
+import "package:provider/provider.dart";
 import "package:recursafe/items/document_item.dart";
 import "package:recursafe/items/password_item.dart";
+import "package:recursafe/providers/document_provider.dart";
+import "package:recursafe/utils/auth_helper.dart"; // Import AuthHelper
 import "package:recursafe/utils/file_utils.dart";
 
 class CustomItem extends StatefulWidget {
@@ -18,6 +21,7 @@ class CustomItem extends StatefulWidget {
   final bool isEditing;
   final VoidCallback? onDelete;
   final VoidCallback? onTap;
+  bool get isDocument => documentItem != null; // Helper getter
 
   @override
   State<CustomItem> createState() => _CustomItemState();
@@ -25,6 +29,7 @@ class CustomItem extends StatefulWidget {
 
 class _CustomItemState extends State<CustomItem> {
   bool _showDeleteConfirmation = false;
+  final AuthHelper _authHelper = AuthHelper(); // Instantiate AuthHelper
 
   @override
   void didUpdateWidget(CustomItem oldWidget) {
@@ -38,13 +43,10 @@ class _CustomItemState extends State<CustomItem> {
 
   @override
   Widget build(BuildContext context) {
-    // ignore: unused_local_variable
     final bool isDocument = widget.documentItem != null;
     final String titleText;
-    // ignore: unused_local_variable
     final DateTime addedOn;
     final String subtitleText;
-    final IconData leadingIconData;
 
     if (widget.documentItem != null) {
       final String formattedDate = DateFormat.yMMMd().format(
@@ -57,7 +59,6 @@ class _CustomItemState extends State<CustomItem> {
       // Format the size for display
       subtitleText =
           "${formatBytes(widget.documentItem!.size, 2)} - $formattedDate";
-      leadingIconData = CupertinoIcons.doc_text_fill;
     } else if (widget.passwordItem != null) {
       final String formattedDate = DateFormat.yMMMd().format(
         widget.passwordItem!.addedOn.toLocal(),
@@ -66,77 +67,111 @@ class _CustomItemState extends State<CustomItem> {
       addedOn =
           widget.passwordItem!.addedOn; // Not directly used in subtitle here
       subtitleText = "Added: $formattedDate";
-      leadingIconData = CupertinoIcons.lock_fill;
     } else {
       return const SizedBox.shrink(); // No item data provided
     }
 
     return Stack(
       alignment: Alignment.centerRight,
-      clipBehavior:
-          Clip.hardEdge, // Ensure content outside the Stack is clipped
+      clipBehavior: Clip.none, // Allow action sheet to appear correctly
       children: <Widget>[
-        CupertinoListTile.notched(
-          key: widget.key, // Pass the widget's key
-          padding: const EdgeInsets.only(
-            left: 20.0,
-            top: 16.0,
-            right: 14.0,
-            bottom: 16.0,
-          ),
-          leading: widget.isEditing
-              ? CupertinoButton(
-                  padding: EdgeInsets.zero,
-                  onPressed: () {
-                    setState(() {
-                      _showDeleteConfirmation = !_showDeleteConfirmation;
-                    });
-                  },
-                  child: Icon(
-                    _showDeleteConfirmation
-                        ? CupertinoIcons.clear_circled_solid
-                        : CupertinoIcons.minus_circle_fill,
-                    color: CupertinoColors.destructiveRed,
-                    size: 28.0,
-                  ),
-                )
-              : Icon(
-                  leadingIconData,
-                  size: 28.0,
-                  color: CupertinoColors.systemGrey,
-                ),
-          title: Text(
-            titleText,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: const TextStyle(fontSize: 19),
-          ),
-          subtitle: Text(
-            subtitleText,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: TextStyle(
-              fontSize: 16,
-              color: CupertinoColors.secondaryLabel.resolveFrom(context),
+        GestureDetector(
+          onLongPress: isDocument && !widget.isEditing
+              ? () {
+                  _showDocumentContextMenu(context, widget.documentItem!);
+                }
+              : null,
+          child: CupertinoListTile.notched(
+            key: widget.key, // Pass the widget's key
+            padding: const EdgeInsets.only(
+              left: 20.0,
+              top: 12.0, // Adjusted padding
+              right: 14.0,
+              bottom: 12.0, // Adjusted padding
             ),
-          ),
-          trailing: (widget.isEditing || _showDeleteConfirmation)
-              ? null
-              : const CupertinoListTileChevron(),
-          onTap: () {
-            if (widget.isEditing) {
-              if (_showDeleteConfirmation) {
-                // If delete confirmation is shown, tapping the tile hides it
-                setState(() {
-                  _showDeleteConfirmation = false;
-                });
+            leading: widget.isEditing
+                ? CupertinoButton(
+                    padding: EdgeInsets.zero,
+                    onPressed: () {
+                      setState(() {
+                        _showDeleteConfirmation = !_showDeleteConfirmation;
+                      });
+                    },
+                    child: Icon(
+                      _showDeleteConfirmation
+                          ? CupertinoIcons
+                                .minus_circle_fill // Consistent icon
+                          : CupertinoIcons.minus_circle_fill,
+                      color: CupertinoColors.destructiveRed,
+                      size: 28.0,
+                    ),
+                  )
+                : CupertinoButton(
+                    // Leading icon is now purely visual in non-editing mode for documents
+                    padding: EdgeInsets.zero,
+                    onPressed: null, // No action on direct tap of the icon
+                    child: Icon(
+                      isDocument
+                          ? (widget.documentItem!.isLocked
+                                ? CupertinoIcons
+                                      .lock_fill // Corrected: lock_doc_fill
+                                : CupertinoIcons
+                                      .doc_text_fill) // Unlocked document icon
+                          : CupertinoIcons.lock_fill, // Password icon
+                      size: 28.0,
+                      color: isDocument && widget.documentItem!.isLocked
+                          ? CupertinoColors.systemBlue.resolveFrom(
+                              context,
+                            ) // Highlight if locked
+                          : CupertinoColors.systemGrey.resolveFrom(context),
+                    ),
+                  ),
+            title: Text(
+              titleText,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(fontSize: 19),
+            ),
+            subtitle: Text(
+              subtitleText,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                fontSize: 16,
+                color: CupertinoColors.secondaryLabel.resolveFrom(context),
+              ),
+            ),
+            trailing: (widget.isEditing || _showDeleteConfirmation)
+                ? null
+                : const CupertinoListTileChevron(),
+            onTap: () {
+              if (widget.isEditing) {
+                if (_showDeleteConfirmation) {
+                  // If delete confirmation is shown, tapping the tile hides it
+                  setState(() {
+                    _showDeleteConfirmation = false;
+                  });
+                }
+                // In edit mode, main tile tap might do nothing else, or something specific
+              } else {
+                // Normal mode tap
+                if (isDocument && widget.documentItem!.isLocked) {
+                  _authHelper.authenticate(context).then((authenticated) {
+                    if (authenticated) {
+                      widget.onTap?.call();
+                    } else {
+                      // Optionally show a message if authentication fails
+                      // print("Authentication failed for locked document.");
+                      // AuthHelper already shows a dialog if master password is required and fails
+                    }
+                  });
+                } else {
+                  // If not locked or not a document, or if it's a password item
+                  widget.onTap?.call();
+                }
               }
-              // In edit mode, main tile tap might do nothing else, or something specific
-            } else {
-              // Normal mode tap
-              widget.onTap?.call();
-            }
-          },
+            },
+          ),
         ),
         // Keep AnimatedSlide in the tree for animations
         Positioned(
@@ -192,6 +227,38 @@ class _CustomItemState extends State<CustomItem> {
           ),
         ),
       ],
+    );
+  }
+
+  void _showDocumentContextMenu(BuildContext context, DocumentItem document) {
+    showCupertinoModalPopup<void>(
+      context: context,
+      builder: (BuildContext context) => CupertinoActionSheet(
+        title: Text(document.name),
+        message: Text(
+          document.isLocked
+              ? 'This file is currently locked.'
+              : 'This file is currently unlocked.',
+        ),
+        actions: <CupertinoActionSheetAction>[
+          CupertinoActionSheetAction(
+            child: Text(document.isLocked ? 'Unlock File' : 'Lock File'),
+            onPressed: () {
+              Navigator.pop(context); // Close the action sheet
+              context.read<DocumentProvider>().updateDocumentLockStatus(
+                document,
+                !document.isLocked,
+              );
+            },
+          ),
+        ],
+        cancelButton: CupertinoActionSheetAction(
+          child: const Text('Cancel'),
+          onPressed: () {
+            Navigator.pop(context);
+          },
+        ),
+      ),
     );
   }
 }

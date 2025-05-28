@@ -44,5 +44,15 @@ class DocumentProvider extends ChangeNotifier {
     _loadDocuments(); // Reload and notify listeners
   }
 
-  // TODO: Add method for updating documents in the box
+  void updateDocumentLockStatus(DocumentItem document, bool isLocked) {
+    // Find the document by its key (HiveObject has a key property)
+    final docToUpdate = _documentsBox.get(document.key);
+    if (docToUpdate != null) {
+      docToUpdate.isLocked = isLocked;
+      docToUpdate.save(); // Save the changes to Hive
+      // No need to call _loadDocuments() if you're updating the instance in the _documents list directly
+      // However, to ensure UI consistency if other parts rely on a fresh list, _loadDocuments() is safer.
+      _loadDocuments(); // Reload and notify listeners
+    }
+  }
 }

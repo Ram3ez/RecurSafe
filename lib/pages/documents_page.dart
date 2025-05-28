@@ -91,6 +91,9 @@ class _DocumentsPageState extends State<DocumentsPage> {
               await originalFile.copy(newFilePath);
 
               // 5. Add the document using the new path (path of the copied file)
+              if (!context.mounted) {
+                return; // Check if the widget is still in the tree
+              }
               context.read<DocumentProvider>().addDocument(
                 name: file.name,
                 path: newFilePath, // Use the path of the copied file

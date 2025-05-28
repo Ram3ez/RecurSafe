@@ -21,13 +21,14 @@ class DocumentItemAdapter extends TypeAdapter<DocumentItem> {
       path: fields[1] as String,
       size: fields[2] as int,
       addedOn: fields[3] as DateTime,
+      isLocked: fields[4] as bool,
     );
   }
 
   @override
   void write(BinaryWriter writer, DocumentItem obj) {
     writer
-      ..writeByte(4)
+      ..writeByte(5)
       ..writeByte(0)
       ..write(obj.name)
       ..writeByte(1)
@@ -35,7 +36,9 @@ class DocumentItemAdapter extends TypeAdapter<DocumentItem> {
       ..writeByte(2)
       ..write(obj.size)
       ..writeByte(3)
-      ..write(obj.addedOn);
+      ..write(obj.addedOn)
+      ..writeByte(4)
+      ..write(obj.isLocked);
   }
 
   @override
