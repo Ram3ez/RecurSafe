@@ -66,6 +66,7 @@ class AuthHelper {
     final masterPasswordHash = await _secureStorage.read(
       key: _masterPasswordKey,
     );
+    if (!context.mounted) return false;
     if (masterPasswordHash != null) {
       // Prompt for master password
       return await _promptForMasterPassword(context, masterPasswordHash);
@@ -74,6 +75,7 @@ class AuthHelper {
     // No biometrics enabled and no master password set - locking a file should probably
     // require a master password to be set first. If we reach here, it means
     // authentication is required but no method is available.
+    if (!context.mounted) return false;
     await _showInfoDialog(
       context,
       'Authentication Required',

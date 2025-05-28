@@ -1,5 +1,6 @@
 import "package:flutter/material.dart";
 import "package:hive_flutter/hive_flutter.dart";
+import "dart:io"; // Import for File operations
 import "package:recursafe/items/document_item.dart";
 
 class DocumentProvider extends ChangeNotifier {
@@ -39,9 +40,24 @@ class DocumentProvider extends ChangeNotifier {
   }
 
   Future<void> deleteDocument(DocumentItem document) async {
-    await document
-        .delete(); // Assumes DocumentItem extends HiveObject and is managed by the box
-    _loadDocuments(); // Reload and notify listeners
+    // Attempt to delete the physical file first
+    try {
+      final filePath = document.path;
+      final file = File(filePath);
+      if (await file.exists()) {
+        await file.delete();
+        print("Successfully deleted file from local storage: $filePath");
+      } else {
+        print("File not found at $filePath, cannot delete from local storage.");
+      }
+    } catch (e) {
+      print("Error deleting file from local storage $document.path: $e");
+      // Depending on your error handling strategy, you might choose not to proceed
+      // with deleting the Hive record if the file deletion fails.
+      // For this implementation, we'll proceed to remove the record from the app.
+    }
+    await document.delete(); // Delete the record from Hive
+    _loadDocuments(); // Reload and notify listeners to update the UI
   }
 
   void updateDocumentLockStatus(DocumentItem document, bool isLocked) {
