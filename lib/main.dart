@@ -9,7 +9,12 @@ import "package:recursafe/pages/settings_page.dart";
 //import "package:flutter/material.dart";
 
 void main() {
-  runApp(DevicePreview(enabled: !kReleaseMode, builder: (context) => MyApp()));
+  runApp(
+    DevicePreview(
+      enabled: /* !kReleaseMode */ false,
+      builder: (context) => MyApp(),
+    ),
+  );
 }
 
 class MyApp extends StatelessWidget {

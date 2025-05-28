@@ -9,7 +9,7 @@ class CustomItem extends StatelessWidget {
     return Padding(
       padding: EdgeInsets.all(15),
       child: Container(
-        width: 170,
+        width: 150,
         decoration: ShapeDecoration(
           color: CupertinoColors.activeBlue,
           shape: RoundedSuperellipseBorder(
