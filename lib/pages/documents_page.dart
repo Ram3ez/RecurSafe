@@ -4,6 +4,8 @@ import "package:recursafe/components/base_page.dart";
 import "package:recursafe/components/custom_item.dart";
 import "package:recursafe/pages/pdf_viewer_page.dart";
 import "package:recursafe/providers/document_provider.dart";
+import 'dart:io' show Platform; // Import for platform checking
+import 'package:open_filex/open_filex.dart'; // Import open_filex
 import "package:file_picker/file_picker.dart"; // Import file_picker
 
 class DocumentsPage extends StatefulWidget {
@@ -104,15 +106,19 @@ class _DocumentsPageState extends State<DocumentsPage> {
             },
             onTap: () {
               final document = filteredDocuments[index];
-              // Navigate to the PDF viewer page
-              Navigator.of(context).push(
-                CupertinoPageRoute(
-                  builder: (context) => PdfViewerPage(
-                    filePath: document.path,
-                    documentName: document.name,
+              if (Platform.isIOS) {
+                OpenFilex.open(document.path);
+              } else {
+                // Navigate to the PDF viewer page on other platforms
+                Navigator.of(context).push(
+                  CupertinoPageRoute(
+                    builder: (context) => PdfViewerPage(
+                      filePath: document.path,
+                      documentName: document.name,
+                    ),
                   ),
-                ),
-              );
+                );
+              }
             },
           ),
         ),

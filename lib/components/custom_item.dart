@@ -2,7 +2,7 @@ import "package:flutter/cupertino.dart";
 import "package:intl/intl.dart";
 import "package:recursafe/items/document_item.dart";
 import "package:recursafe/items/password_item.dart";
-import "package:recursafe/utils/file_utils.dart"; // Import the utility
+import "package:recursafe/utils/file_utils.dart";
 
 class CustomItem extends StatefulWidget {
   const CustomItem({
@@ -11,7 +11,7 @@ class CustomItem extends StatefulWidget {
     this.passwordItem,
     this.isEditing = false,
     this.onDelete,
-    this.onTap, // For normal mode tap
+    this.onTap,
   });
   final DocumentItem? documentItem;
   final PasswordItem? passwordItem;
@@ -29,7 +29,6 @@ class _CustomItemState extends State<CustomItem> {
   @override
   void didUpdateWidget(CustomItem oldWidget) {
     super.didUpdateWidget(oldWidget);
-    // If editing mode is turned off externally, hide the delete confirmation
     if (oldWidget.isEditing && !widget.isEditing && _showDeleteConfirmation) {
       setState(() {
         _showDeleteConfirmation = false;

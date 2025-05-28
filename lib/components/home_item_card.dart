@@ -2,6 +2,8 @@ import 'package:flutter/cupertino.dart';
 import 'package:intl/intl.dart';
 import 'package:recursafe/items/document_item.dart';
 import 'package:recursafe/items/password_item.dart';
+import 'dart:io' show Platform; // Import for platform checking
+import 'package:open_filex/open_filex.dart'; // Import open_filex
 import 'package:recursafe/pages/pdf_viewer_page.dart'; // Import PdfViewerPage
 import 'package:recursafe/utils/file_utils.dart'; // Import the utility
 
@@ -39,15 +41,19 @@ class HomeItemCard extends StatelessWidget {
     return CupertinoButton(
       onPressed: () {
         if (isDocument) {
-          // Navigate to PdfViewerPage for documents
-          Navigator.of(context).push(
-            CupertinoPageRoute(
-              builder: (context) => PdfViewerPage(
-                filePath: documentItem!.path,
-                documentName: documentItem!.name,
+          if (Platform.isIOS) {
+            OpenFilex.open(documentItem!.path);
+          } else {
+            // Navigate to PdfViewerPage for documents on other platforms
+            Navigator.of(context).push(
+              CupertinoPageRoute(
+                builder: (context) => PdfViewerPage(
+                  filePath: documentItem!.path,
+                  documentName: documentItem!.name,
+                ),
               ),
-            ),
-          );
+            );
+          }
         } else {
           print("Tapped on password card: ${passwordItem!.displayName}");
         }

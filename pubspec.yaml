@@ -45,6 +45,7 @@ dependencies:
   flutter_secure_storage: ^9.2.4
   file_picker: ^10.1.9
   pdfx: ^2.9.1
+  open_filex: ^4.7.0
 
 dev_dependencies:
   flutter_test:
