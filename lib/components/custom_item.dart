@@ -230,10 +230,20 @@ class _CustomItemState extends State<CustomItem> {
     );
   }
 
-  void _showDocumentContextMenu(BuildContext context, DocumentItem document) {
+  void _showDocumentContextMenu(
+    BuildContext itemContext,
+    DocumentItem document,
+  ) {
+    // Get the provider using the CustomItem's context, which is known to be under the MultiProvider.
+    final documentProvider = Provider.of<DocumentProvider>(
+      itemContext,
+      listen: false,
+    );
+
     showCupertinoModalPopup<void>(
-      context: context,
-      builder: (BuildContext context) => CupertinoActionSheet(
+      context: itemContext, // Use the item's context to launch the modal
+      builder: (BuildContext modalContext) => CupertinoActionSheet(
+        // This context is for the modal itself
         title: Text(document.name),
         message: Text(
           document.isLocked
@@ -244,8 +254,9 @@ class _CustomItemState extends State<CustomItem> {
           CupertinoActionSheetAction(
             child: Text(document.isLocked ? 'Unlock File' : 'Lock File'),
             onPressed: () {
-              Navigator.pop(context); // Close the action sheet
-              context.read<DocumentProvider>().updateDocumentLockStatus(
+              Navigator.pop(modalContext); // Pop using the modal's context
+              // Use the documentProvider instance obtained earlier
+              documentProvider.updateDocumentLockStatus(
                 document,
                 !document.isLocked,
               );
@@ -255,7 +266,7 @@ class _CustomItemState extends State<CustomItem> {
         cancelButton: CupertinoActionSheetAction(
           child: const Text('Cancel'),
           onPressed: () {
-            Navigator.pop(context);
+            Navigator.pop(modalContext); // Pop using the modal's context
           },
         ),
       ),

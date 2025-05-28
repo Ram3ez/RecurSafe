@@ -40,6 +40,7 @@ Future<void> main() async {
   final encryptionKey = base64Url.decode(encryptionKeyString);
 
   // Open encrypted boxes
+  //await Hive.deleteBoxFromDisk("documentsBox");
 
   await Hive.openBox<DocumentItem>(
     'documentsBox',

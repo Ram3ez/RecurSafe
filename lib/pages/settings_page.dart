@@ -1,6 +1,7 @@
 import "package:flutter/cupertino.dart";
 import "package:flutter_secure_storage/flutter_secure_storage.dart";
 import "package:local_auth/local_auth.dart";
+import "package:local_auth_ios/local_auth_ios.dart"; // For iOS specific messages
 import "package:local_auth_android/local_auth_android.dart"; // For Android specific messages
 import "package:recursafe/pages/master_password_page.dart"; // Import the new page
 
@@ -75,14 +76,24 @@ class _SettingsPageState extends State<SettingsPage> {
   }
 
   Future<void> _loadBiometricPreference() async {
-    final storedPreference = await _secureStorage.read(
-      key: _biometricEnabledKey,
-    );
-    if (mounted) {
-      setState(() {
-        _biometricsEnabled = storedPreference == 'true';
-        _isLoadingBiometricPreference = false;
-      });
+    try {
+      final storedPreference = await _secureStorage.read(
+        key: _biometricEnabledKey,
+      );
+      if (mounted) {
+        setState(() {
+          _biometricsEnabled = storedPreference == 'true';
+          _isLoadingBiometricPreference = false;
+        });
+      }
+    } catch (e) {
+      print("Error loading biometric preference: $e");
+      if (mounted) {
+        setState(() {
+          _biometricsEnabled = false; // Assume disabled on error
+          _isLoadingBiometricPreference = false; // Stop loading
+        });
+      }
     }
   }
 
@@ -121,7 +132,9 @@ class _SettingsPageState extends State<SettingsPage> {
               signInTitle: 'RecurSafe Biometric Login',
               cancelButton: 'Cancel',
             ),
-            // IOSAuthMessages can also be provided if needed
+            IOSAuthMessages(
+              cancelButton: 'Cancel',
+            ),
           ],
           options: const AuthenticationOptions(
             stickyAuth: true, // Keep auth session active if app is backgrounded
@@ -136,7 +149,7 @@ class _SettingsPageState extends State<SettingsPage> {
         } else {
           if (mounted) setState(() => _biometricsEnabled = false);
           await _showInfoDialog(
-            'Authentication Failed',
+            'Authentication Failed or Cancelled',
             'Could not enable biometrics.',
           );
         }
@@ -188,7 +201,9 @@ class _SettingsPageState extends State<SettingsPage> {
                         CupertinoIcons.lock_rotation,
                       ), // Or CupertinoIcons.hand_raised_fill / faceid
                       trailing: CupertinoSwitch(
-                        value: _biometricsEnabled,
+                        value:
+                            _biometricsEnabled ??
+                            false, // Safeguard against null
                         onChanged: _toggleBiometrics,
                       ),
                     ),

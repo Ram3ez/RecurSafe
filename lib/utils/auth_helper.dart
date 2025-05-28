@@ -87,56 +87,25 @@ class AuthHelper {
     String storedHash,
   ) async {
     TextEditingController passwordController = TextEditingController();
-    bool isAuthenticated = false;
-
-    await showCupertinoDialog<void>(
+    // Use a GlobalKey to access the state of _MasterPasswordDialogContent
+    // if needed, though for this simple case, passing a callback is cleaner.
+    // For returning the result, we'll rely on the value returned by showCupertinoDialog.
+    final bool? isAuthenticated = await showCupertinoDialog<bool>(
       context: context,
-      builder: (BuildContext dialogContext) => CupertinoAlertDialog(
-        // Use dialogContext
-        title: const Text('Enter Master Password'),
-        content: Padding(
-          padding: const EdgeInsets.only(top: 8.0),
-          child: CupertinoTextField(
-            controller: passwordController,
-            placeholder: 'Master Password',
-            obscureText: true,
-            keyboardType: TextInputType.visiblePassword,
-            autofocus: true,
-          ),
-        ),
-        actions: <CupertinoDialogAction>[
-          CupertinoDialogAction(
-            child: const Text('Cancel'),
-            onPressed: () {
-              Navigator.of(dialogContext).pop(); // Use dialogContext
-            },
-          ),
-          CupertinoDialogAction(
-            child: const Text('Authenticate'),
-            isDefaultAction: true,
-            onPressed: () {
-              final enteredPasswordHash = _hashPassword(
-                passwordController.text,
-              );
-              if (enteredPasswordHash == storedHash) {
-                isAuthenticated = true;
-                Navigator.of(dialogContext).pop(); // Use dialogContext
-              } else {
-                // A better UX would be to show an error message in the dialog itself
-                // For now, we'll just print and let the user try again or cancel
-                print("Incorrect master password");
-                // Optionally, show an error within the dialog or a new dialog
-                // For simplicity, this example just closes on incorrect attempt after printing.
-                // To keep the dialog open and show an error, you'd need a StatefulWidget for the dialog content.
-              }
-            },
-          ),
-        ],
-      ),
+      barrierDismissible: false, // Prevent dismissing by tapping outside
+      builder: (BuildContext dialogContext) {
+        return _MasterPasswordDialogContent(
+          passwordController: passwordController,
+          storedHash: storedHash,
+          hashPasswordCallback: _hashPassword,
+        );
+      },
     );
 
-    passwordController.dispose();
-    return isAuthenticated;
+    passwordController
+        .dispose(); // Dispose the controller after the dialog is closed
+    return isAuthenticated ??
+        false; // Return true if authenticated, false otherwise (including null)
   }
 
   Future<void> _showInfoDialog(
@@ -160,6 +129,90 @@ class AuthHelper {
           ),
         ],
       ),
+    );
+  }
+}
+
+// New StatefulWidget for the dialog content
+class _MasterPasswordDialogContent extends StatefulWidget {
+  final TextEditingController passwordController;
+  final String storedHash;
+  final String Function(String) hashPasswordCallback;
+
+  const _MasterPasswordDialogContent({
+    required this.passwordController,
+    required this.storedHash,
+    required this.hashPasswordCallback,
+  });
+
+  @override
+  State<_MasterPasswordDialogContent> createState() =>
+      _MasterPasswordDialogContentState();
+}
+
+class _MasterPasswordDialogContentState
+    extends State<_MasterPasswordDialogContent> {
+  String? _errorMessage;
+
+  void _authenticate() {
+    final enteredPasswordHash = widget.hashPasswordCallback(
+      widget.passwordController.text,
+    );
+    if (enteredPasswordHash == widget.storedHash) {
+      Navigator.of(context).pop(true); // Pop with true for success
+    } else {
+      setState(() {
+        _errorMessage = 'Incorrect master password. Please try again.';
+        widget.passwordController.clear(); // Clear the text field
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return CupertinoAlertDialog(
+      title: const Text('Enter Master Password'),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: <Widget>[
+          Padding(
+            padding: const EdgeInsets.only(top: 12.0, bottom: 8.0),
+            child: CupertinoTextField(
+              controller: widget.passwordController,
+              placeholder: 'Master Password',
+              obscureText: true,
+              keyboardType: TextInputType.visiblePassword,
+              autofocus: true,
+              onSubmitted: (_) =>
+                  _authenticate(), // Allow submitting with enter key
+            ),
+          ),
+          if (_errorMessage != null)
+            Padding(
+              padding: const EdgeInsets.only(top: 8.0),
+              child: Text(
+                _errorMessage!,
+                style: TextStyle(
+                  color: CupertinoColors.destructiveRed.resolveFrom(context),
+                  fontSize: 13,
+                ),
+              ),
+            ),
+        ],
+      ),
+      actions: <CupertinoDialogAction>[
+        CupertinoDialogAction(
+          child: const Text('Cancel'),
+          onPressed: () {
+            Navigator.of(context).pop(false); // Pop with false for cancellation
+          },
+        ),
+        CupertinoDialogAction(
+          child: const Text('Authenticate'),
+          isDefaultAction: true,
+          onPressed: _authenticate,
+        ),
+      ],
     );
   }
 }
