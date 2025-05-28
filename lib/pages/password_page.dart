@@ -16,11 +16,13 @@ class PasswordPage extends StatelessWidget {
               placeholder: "Search Password",
             ),
           ),
-          SliverFillRemaining(
-            child: ListView.builder(
-              itemCount: 5,
-              itemBuilder: (context, index) =>
-                  SizedBox(height: 130, child: CustomItem()),
+          SliverList(
+            delegate: SliverChildBuilderDelegate(
+              childCount: 5,
+              (context, index) => SizedBox(
+                height: 130,
+                child: CustomItem(),
+              ),
             ),
           ),
         ],
