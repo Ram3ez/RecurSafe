@@ -4,9 +4,11 @@ import "package:recursafe/components/base_page.dart";
 import "package:recursafe/components/custom_item.dart";
 import "package:recursafe/pages/pdf_viewer_page.dart";
 import "package:recursafe/providers/document_provider.dart";
-import 'dart:io' show Platform; // Import for platform checking
+import 'dart:io' show Platform, Directory, File; // Import for platform checking
 import 'package:open_filex/open_filex.dart'; // Import open_filex
 import "package:file_picker/file_picker.dart"; // Import file_picker
+import 'package:path_provider/path_provider.dart'; // For getting app directory
+import 'package:path/path.dart' as p; // For path manipulation
 
 class DocumentsPage extends StatefulWidget {
   const DocumentsPage({super.key});
@@ -66,17 +68,40 @@ class _DocumentsPageState extends State<DocumentsPage> {
             PlatformFile file = result.files.single;
 
             if (file.path != null) {
-              // Ensure you have context available if needed for UI updates immediately
-              // For provider, context is usually implicitly available if called from a widget method
               if (!context.mounted) {
                 return; // Check if the widget is still in the tree
               }
 
+              // 1. Get the application's documents directory
+              final appDir = await getApplicationDocumentsDirectory();
+              // 2. Create a subdirectory for your app's documents if it doesn't exist
+              final documentsAppDir = Directory(
+                p.join(appDir.path, "recursafe_documents"),
+              );
+              if (!await documentsAppDir.exists()) {
+                await documentsAppDir.create(recursive: true);
+              }
+              // 3. Define the new path for the copied file
+              // Using the original file name. You might want to add a timestamp or UUID for uniqueness if needed.
+              final newFileName = file.name;
+              final newFilePath = p.join(documentsAppDir.path, newFileName);
+
+              // 4. Copy the file
+              final originalFile = File(file.path!);
+              await originalFile.copy(newFilePath);
+
+              // 5. Add the document using the new path (path of the copied file)
               context.read<DocumentProvider>().addDocument(
                 name: file.name,
-                path: file.path!,
+                path: newFilePath, // Use the path of the copied file
                 size: file.size, // size is in bytes (int)
                 addedOn: DateTime.now(),
+              );
+            } else if (file.bytes != null) {
+              // Handle web or cases where only bytes are available (less common for local PDF picking)
+              // This part would require saving bytes to a file, similar to above.
+              print(
+                "File picked as bytes. Saving from bytes is not yet implemented in this example.",
               );
             } else {
               // Handle cases where path is null (e.g., web, some cloud files)
