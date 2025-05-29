@@ -43,7 +43,5 @@
 	<true/>
 	<key>UIApplicationSupportsIndirectInputEvents</key>
 	<true/>
-	<key>NSFaceIDUsageDescription</key>
-	<string>Please authenticate to enable biometric login and access your secure data.</string>
 </dict>
 </plist>
