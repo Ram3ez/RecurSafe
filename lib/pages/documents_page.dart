@@ -10,7 +10,8 @@ import "package:file_picker/file_picker.dart"; // Import file_picker
 import 'package:path_provider/path_provider.dart'; // For getting app directory
 import 'package:path/path.dart' as p; // For path manipulation
 import 'package:recursafe/services/auth_service.dart'; // Import AuthService
-import 'package:recursafe/utils/constants.dart'; // Import AppConstants
+import 'package:recursafe/items/document_item.dart'
+    show kDocumentsSubDir; // Import kDocumentsSubDir
 import 'package:recursafe/utils/dialog_utils.dart'; // Import DialogUtils
 
 class DocumentsPage extends StatefulWidget {
@@ -42,16 +43,20 @@ class _DocumentsPageState extends State<DocumentsPage> {
   }
 
   // Helper method to open document
-  void _openDocument(BuildContext pageContext, String path, String name) {
+  void _openDocument(
+    BuildContext pageContext,
+    String accessiblePath,
+    String documentName,
+  ) {
     if (Platform.isIOS) {
-      OpenFilex.open(path);
+      OpenFilex.open(accessiblePath);
     } else {
       // Navigate to the PDF viewer page on other platforms
       Navigator.of(pageContext).push(
         CupertinoPageRoute(
-          builder: (context) => PdfViewerPage(
-            filePath: path,
-            documentName: name,
+          builder: (_) => PdfViewerPage(
+            filePath: accessiblePath,
+            documentName: documentName,
           ),
         ),
       );
@@ -98,7 +103,8 @@ class _DocumentsPageState extends State<DocumentsPage> {
               final appDir = await getApplicationDocumentsDirectory();
               // 2. Create a subdirectory for your app's documents if it doesn't exist
               final documentsAppDir = Directory(
-                p.join(appDir.path, "recursafe_documents"),
+                // Use the constant
+                p.join(appDir.path, kDocumentsSubDir),
               );
               if (!await documentsAppDir.exists()) {
                 await documentsAppDir.create(recursive: true);
@@ -117,8 +123,8 @@ class _DocumentsPageState extends State<DocumentsPage> {
                 return; // Check if the widget is still in the tree
               }
               context.read<DocumentProvider>().addDocument(
-                name: file.name,
-                path: newFilePath, // Use the path of the copied file
+                originalFileName: file.name, // Use originalFileName
+                copiedFilePath: newFilePath, // Use copiedFilePath
                 size: file.size, // size is in bytes (int)
                 addedOn: DateTime.now(),
               );
@@ -149,13 +155,37 @@ class _DocumentsPageState extends State<DocumentsPage> {
           (context, index) => CustomItem(
             isEditing: _isEditing,
             documentItem: filteredDocuments[index],
-            onDelete: () {
-              // Optional: Show a confirmation dialog before deleting
+            onDelete: () async {
+              // Make the onDelete callback async
               final documentToDelete = filteredDocuments[index];
-              context.read<DocumentProvider>().deleteDocument(documentToDelete);
+              final documentProvider = context.read<DocumentProvider>();
+
+              if (documentToDelete.isLocked) {
+                await _authService.authenticateAndExecute(
+                  // Add await here
+                  context: context,
+                  localizedReason:
+                      'To delete locked document "${documentToDelete.name}", please authenticate.',
+                  itemName: documentToDelete.name,
+                  onAuthenticated: () async {
+                    await documentProvider.deleteDocument(documentToDelete);
+                  },
+                  onNotAuthenticated: () async {
+                    // Optional: Handle if authentication fails
+                    print(
+                      'Authentication failed for deleting locked document.',
+                    );
+                  },
+                );
+              } else {
+                // If not locked, delete directly (consider a confirmation dialog here too for consistency)
+                documentProvider.deleteDocument(documentToDelete);
+              }
             },
             onTap: () async {
               final document = filteredDocuments[index];
+              final documentProvider = context
+                  .read<DocumentProvider>(); // Get provider
               if (document.isLocked) {
                 await _authService.authenticateAndExecute(
                   context: context,
@@ -163,15 +193,28 @@ class _DocumentsPageState extends State<DocumentsPage> {
                       'To open "${document.name}", please authenticate.',
                   itemName: document.name,
                   onAuthenticated: () async {
-                    _openDocument(context, document.path, document.name);
+                    final accessiblePath = await documentProvider
+                        .getAccessibleDocumentPath(document);
+                    if (!context.mounted) return;
+                    await documentProvider.updateLastOpened(
+                      document,
+                    ); // Update lastOpened
+                    if (!context.mounted) return;
+                    _openDocument(context, accessiblePath, document.name);
                   },
                   onNotAuthenticated: () async {
                     // Optional: specific action if not authenticated, dialog is shown by service
                   },
                 );
               } else {
-                // If the document is not locked, open it directly
-                _openDocument(context, document.path, document.name);
+                final accessiblePath = await documentProvider
+                    .getAccessibleDocumentPath(document);
+                if (!context.mounted) return;
+                await documentProvider.updateLastOpened(
+                  document,
+                ); // Update lastOpened
+                if (!context.mounted) return;
+                _openDocument(context, accessiblePath, document.name);
               }
             },
           ),

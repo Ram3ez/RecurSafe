@@ -5,6 +5,9 @@ import "package:local_auth_ios/local_auth_ios.dart"; // For iOS specific message
 import "package:local_auth_android/local_auth_android.dart"; // For Android specific messages
 import "package:recursafe/pages/master_password_page.dart"; // Import the new page
 import 'dart:io' show Platform; // Import Platform
+import 'package:provider/provider.dart'; // Import Provider
+import 'package:recursafe/providers/document_provider.dart'; // Import DocumentProvider
+import 'package:recursafe/providers/password_provider.dart'; // Import PasswordProvider
 import 'package:recursafe/utils/constants.dart'; // Import AppConstants
 import 'package:recursafe/utils/dialog_utils.dart'; // Import DialogUtils
 
@@ -176,6 +179,62 @@ class _SettingsPageState extends State<SettingsPage> {
     }
   }
 
+  Future<void> _handleClearAll(
+    BuildContext context,
+    String itemType,
+    Future<void> Function() clearAction,
+  ) async {
+    // Step 1: Confirmation Dialog
+    DialogUtils.showConfirmationDialog(
+      context: context,
+      title: 'Clear All $itemType?',
+      content:
+          'Are you sure you want to delete all $itemType? This action cannot be undone.',
+      confirmActionText: 'Clear All',
+      onConfirm: () async {
+        // Step 2: Biometric Authentication
+        try {
+          final bool authenticated = await _localAuth.authenticate(
+            localizedReason: 'Please authenticate to clear all $itemType.',
+            authMessages: const <AuthMessages>[
+              AndroidAuthMessages(
+                signInTitle: 'RecurSafe Clear Data',
+                cancelButton: 'Cancel',
+              ),
+              IOSAuthMessages(
+                cancelButton: 'Cancel',
+              ),
+            ],
+            options: AuthenticationOptions(
+              stickyAuth: true,
+              biometricOnly: !Platform.isWindows,
+            ),
+          );
+
+          if (!mounted) return;
+
+          if (authenticated) {
+            // Step 3: Provider Action
+            await clearAction();
+            DialogUtils.showInfoDialog(
+              context,
+              'Success',
+              'All $itemType have been cleared.',
+            );
+          } else {
+            DialogUtils.showInfoDialog(
+              context,
+              'Authentication Failed',
+              'Could not clear $itemType.',
+            );
+          }
+        } catch (e) {
+          DialogUtils.showInfoDialog(context, 'Error', 'An error occurred: $e');
+        }
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return CupertinoPageScaffold(
@@ -233,16 +292,10 @@ class _SettingsPageState extends State<SettingsPage> {
                         color: CupertinoColors.destructiveRed,
                       ),
                       onTap: () {
-                        DialogUtils.showConfirmationDialog(
-                          context: context,
-                          title: 'Clear All Documents?',
-                          content:
-                              'Are you sure you want to delete all documents? This action cannot be undone.',
-                          confirmActionText: 'Clear All',
-                          onConfirm: () {
-                            // TODO: Implement clear all documents logic
-                            print('Clear All Documents confirmed');
-                          },
+                        _handleClearAll(
+                          context,
+                          "Documents",
+                          context.read<DocumentProvider>().clearAllDocuments,
                         );
                       },
                     ),
@@ -256,16 +309,10 @@ class _SettingsPageState extends State<SettingsPage> {
                         color: CupertinoColors.destructiveRed,
                       ),
                       onTap: () {
-                        DialogUtils.showConfirmationDialog(
-                          context: context,
-                          title: 'Clear All Passwords?',
-                          content:
-                              'Are you sure you want to delete all passwords? This action cannot be undone.',
-                          confirmActionText: 'Clear All',
-                          onConfirm: () {
-                            // TODO: Implement clear all passwords logic
-                            print('Clear All Passwords confirmed');
-                          },
+                        _handleClearAll(
+                          context,
+                          "Passwords",
+                          context.read<PasswordProvider>().clearAllPasswords,
                         );
                       },
                     ),

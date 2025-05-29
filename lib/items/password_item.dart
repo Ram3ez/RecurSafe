@@ -16,6 +16,10 @@ class PasswordItem extends HiveObject {
   final DateTime addedOn;
   @HiveField(5)
   final String? ivBase64;
+  @HiveField(6)
+  final DateTime? lastOpened;
+  @HiveField(7)
+  final String id;
 
   PasswordItem({
     required this.displayName,
@@ -24,5 +28,7 @@ class PasswordItem extends HiveObject {
     required this.encryptedPassword,
     required this.addedOn,
     this.ivBase64,
+    this.lastOpened,
+    required this.id,
   });
 }

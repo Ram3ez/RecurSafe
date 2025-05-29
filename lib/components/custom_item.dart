@@ -289,9 +289,8 @@ class _CustomItemState extends State<CustomItem> {
                 itemName: document.name,
                 onAuthenticated: () async {
                   // If authenticated, then update the lock status
-                  documentProvider.updateDocumentLockStatus(
+                  documentProvider.toggleLockStatus(
                     document,
-                    !document.isLocked,
                   );
                 },
                 onNotAuthenticated: () async {

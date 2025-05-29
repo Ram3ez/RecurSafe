@@ -10,8 +10,13 @@ import 'package:recursafe/utils/dialog_utils.dart';
 
 class ViewPasswordPage extends StatefulWidget {
   final PasswordItem passwordItem;
+  final PasswordProvider passwordProvider;
 
-  const ViewPasswordPage({super.key, required this.passwordItem});
+  const ViewPasswordPage({
+    super.key,
+    required this.passwordItem,
+    required this.passwordProvider,
+  });
 
   @override
   State<ViewPasswordPage> createState() => _ViewPasswordPageState();
@@ -139,10 +144,9 @@ class _ViewPasswordPageState extends State<ViewPasswordPage> {
       onAuthenticated: () async {
         try {
           if (!_isPasswordVisible || _decryptedPassword.isEmpty) {
-            final passwordProvider = context.read<PasswordProvider>();
-            _decryptedPassword = await passwordProvider.getDecryptedPassword(
-              widget.passwordItem,
-            );
+            // Use the passed provider instance
+            _decryptedPassword = await widget.passwordProvider
+                .getDecryptedPassword(widget.passwordItem);
           }
 
           if (forCopy) {
@@ -152,10 +156,17 @@ class _ViewPasswordPageState extends State<ViewPasswordPage> {
 
           if (mounted) {
             if (forRevealToggle) {
-              setState(() => _isPasswordVisible = !_isPasswordVisible);
+              final newVisibility = !_isPasswordVisible;
+              setState(() => _isPasswordVisible = newVisibility);
+              if (newVisibility) {
+                // If password is now visible
+                widget.passwordProvider.updateLastOpened(widget.passwordItem);
+              }
             } else if (forCopy && !_isPasswordVisible) {
               // If copied and was not visible, make it visible
               setState(() => _isPasswordVisible = true);
+              // Also update lastOpened as it's now viewed
+              widget.passwordProvider.updateLastOpened(widget.passwordItem);
             }
           }
         } catch (e) {
@@ -238,7 +249,6 @@ class _ViewPasswordPageState extends State<ViewPasswordPage> {
     if (_isProcessing) return;
     setState(() => _isProcessing = true);
 
-    final passwordProvider = context.read<PasswordProvider>();
     try {
       // Basic validation (can be expanded)
       if (_websiteController.text.isEmpty || _userNameController.text.isEmpty) {
@@ -260,7 +270,7 @@ class _ViewPasswordPageState extends State<ViewPasswordPage> {
         return;
       }
 
-      await passwordProvider.updatePassword(
+      await widget.passwordProvider.updatePassword(
         widget.passwordItem, // The original item to find and update
         displayName:
             widget.passwordItem.displayName, // Display name not edited here
@@ -379,32 +389,21 @@ class _ViewPasswordPageState extends State<ViewPasswordPage> {
           padding: const EdgeInsets.only(top: 4.0),
           child: content,
         ),
-        trailing: isPassword
-            ? CupertinoButton(
-                padding: const EdgeInsets.only(left: 16.0, right: 4.0),
-                minSize: 0,
-                onPressed: _isProcessing || _isEditing
-                    ? null
-                    : () => _handlePasswordAction(forRevealToggle: true),
-                child: _isProcessing && !_isPasswordVisible && !_isEditing
-                    ? const CupertinoActivityIndicator(radius: 11)
-                    : Icon(
-                        _isPasswordVisible
-                            ? CupertinoIcons.eye_slash_fill
-                            : CupertinoIcons.eye_fill,
-                        size: 24,
-                      ),
+        trailing:
+            (canCopy &&
+                !isPassword) // Show copy icon only for non-password, copyable fields in view mode
+            ? const Icon(
+                CupertinoIcons.doc_on_clipboard,
+                color: CupertinoColors.systemGrey,
+                size: 22,
               )
-            : (canCopy
-                  ? const Icon(
-                      CupertinoIcons.doc_on_clipboard,
-                      color: CupertinoColors.systemGrey,
-                      size: 22,
-                    )
-                  : null),
+            : null,
         onTap: canCopy && !_isEditing
             ? () async {
                 if (isPassword) {
+                  // Tapping the password row handles both reveal and copy intent
+                  // If not visible, it will auth, reveal, and copy.
+                  // If visible, it will just copy.
                   await _handlePasswordAction(forCopy: true);
                 } else {
                   await Clipboard.setData(ClipboardData(text: value));
@@ -417,6 +416,8 @@ class _ViewPasswordPageState extends State<ViewPasswordPage> {
             ? const CupertinoActivityIndicator(radius: 10)
             : null,
       );
+      // Note: The following properties are illustrative.
+      // CupertinoListTile.notched doesn't directly expose splashColor/highlightColor in its constructor in all Flutter versions.
     }
   }
 

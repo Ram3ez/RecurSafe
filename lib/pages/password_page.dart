@@ -6,6 +6,7 @@ import "package:recursafe/providers/password_provider.dart";
 import "package:recursafe/items/password_item.dart";
 import "package:recursafe/pages/add_edit_password_page.dart";
 import "package:recursafe/pages/view_password_page.dart"; // Import the new page
+import "package:recursafe/services/auth_service.dart"; // Import AuthService
 //import "package:flutter/foundation.dart"; // Import for kReleaseMode if needed later
 
 class PasswordPage extends StatefulWidget {
@@ -18,6 +19,7 @@ class PasswordPage extends StatefulWidget {
 class _PasswordPageState extends State<PasswordPage> {
   String _searchQuery = '';
   bool _isEditing = false;
+  final AuthService _authService = AuthService(); // Instantiate AuthService
 
   void _handleSearchChanged(String query) {
     // Optional: Add a debounce here for performance on large lists
@@ -79,10 +81,28 @@ class _PasswordPageState extends State<PasswordPage> {
           (context, index) => CustomItem(
             isEditing: _isEditing,
             passwordItem: filteredPasswords[index],
-            onDelete: () {
-              // Optional: Show a confirmation dialog
+            onDelete: () async {
+              // Make onDelete async
               final passwordToDelete = filteredPasswords[index];
-              context.read<PasswordProvider>().deletePassword(passwordToDelete);
+              final passwordProvider = context.read<PasswordProvider>();
+
+              // Always authenticate for password deletion
+              await _authService.authenticateAndExecute(
+                // Add await
+                context: context,
+                localizedReason:
+                    'To delete password "${passwordToDelete.displayName}", please authenticate.',
+                itemName: passwordToDelete.displayName,
+                onAuthenticated: () async {
+                  await passwordProvider.deletePassword(passwordToDelete);
+                },
+                onNotAuthenticated: () async {
+                  // Optional: Handle if authentication fails
+                  print(
+                    'Authentication failed for deleting password: ${passwordToDelete.displayName}',
+                  );
+                },
+              );
             },
             onTap: () {
               if (!_isEditing) {
@@ -92,6 +112,7 @@ class _PasswordPageState extends State<PasswordPage> {
                     builder: (newContext) => ChangeNotifierProvider.value(
                       value: passwordProvider,
                       child: ViewPasswordPage(
+                        passwordProvider: context.read<PasswordProvider>(),
                         passwordItem: filteredPasswords[index],
                       ),
                     ),

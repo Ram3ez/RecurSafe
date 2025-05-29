@@ -87,7 +87,7 @@ class _AddEditPasswordPageState extends State<AddEditPasswordPage> {
   Widget _buildTextFieldRow({
     required TextEditingController controller,
     required String placeholder,
-    required IconData prefixIcon,
+    required String prefixLabel, // Changed from IconData to String
     bool isPassword = false,
     TextInputType keyboardType = TextInputType.text,
     TextCapitalization textCapitalization = TextCapitalization.none,
@@ -95,8 +95,15 @@ class _AddEditPasswordPageState extends State<AddEditPasswordPage> {
   }) {
     return CupertinoFormRow(
       prefix: Padding(
-        padding: const EdgeInsets.only(right: 8.0),
-        child: Icon(prefixIcon, color: CupertinoColors.systemGrey),
+        padding: const EdgeInsets.only(
+          right: 8.0,
+        ), // Keep padding for the label
+        child: Text(
+          prefixLabel,
+          style: TextStyle(
+            color: CupertinoColors.secondaryLabel.resolveFrom(context),
+          ),
+        ),
       ),
       child: FormField<String>(
         initialValue: controller.text,
@@ -132,6 +139,8 @@ class _AddEditPasswordPageState extends State<AddEditPasswordPage> {
                 obscureText: isPassword ? _obscurePassword : false,
                 textCapitalization: textCapitalization,
                 onChanged: (text) =>
+                    // Ensure FormField's value is updated for validation,
+                    // though direct controller access in validator is also used.
                     field.didChange(text), // Update FormField state
                 suffix: isPassword
                     ? Padding(
@@ -154,6 +163,11 @@ class _AddEditPasswordPageState extends State<AddEditPasswordPage> {
                         ),
                       )
                     : null,
+                padding: const EdgeInsets.symmetric(
+                  vertical: 12.0,
+                  horizontal: 0.0,
+                ), // Consistent padding
+                decoration: null, // Remove default border to blend with FormRow
               ),
               if (field.hasError)
                 Padding(
@@ -205,24 +219,24 @@ class _AddEditPasswordPageState extends State<AddEditPasswordPage> {
                     _buildTextFieldRow(
                       controller: _displayNameController,
                       placeholder: 'Display Name (e.g., Google Account)',
-                      prefixIcon: CupertinoIcons.tag_fill,
+                      prefixLabel: 'Name',
                       textCapitalization: TextCapitalization.words,
                     ),
                     _buildTextFieldRow(
                       controller: _websiteNameController,
                       placeholder: 'Website (e.g., google.com)',
-                      prefixIcon: CupertinoIcons.globe,
+                      prefixLabel: 'Website',
                       keyboardType: TextInputType.url,
                     ),
                     _buildTextFieldRow(
                       controller: _userNameController,
                       placeholder: 'Username or Email',
-                      prefixIcon: CupertinoIcons.person_fill,
+                      prefixLabel: 'Username',
                     ),
                     _buildTextFieldRow(
                       controller: _passwordController,
                       placeholder: 'Password',
-                      prefixIcon: CupertinoIcons.lock_fill,
+                      prefixLabel: 'Password',
                       isPassword: true,
                       validator: (value) {
                         // Validator for the FormField
