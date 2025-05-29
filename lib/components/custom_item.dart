@@ -1,11 +1,15 @@
 import "package:flutter/cupertino.dart";
 import "package:intl/intl.dart";
+import "package:flutter/services.dart"; // For Clipboard
 import "package:provider/provider.dart";
 import "package:recursafe/items/document_item.dart";
 import "package:recursafe/items/password_item.dart";
 import "package:recursafe/providers/document_provider.dart";
-import "package:recursafe/utils/auth_helper.dart"; // Import AuthHelper
+import "package:recursafe/providers/password_provider.dart";
 import "package:recursafe/utils/file_utils.dart";
+import 'package:recursafe/services/auth_service.dart'; // Import AuthService
+import 'package:recursafe/utils/dialog_utils.dart';
+import 'package:recursafe/pages/add_edit_password_page.dart'; // For navigation
 
 class CustomItem extends StatefulWidget {
   const CustomItem({
@@ -29,7 +33,8 @@ class CustomItem extends StatefulWidget {
 
 class _CustomItemState extends State<CustomItem> {
   bool _showDeleteConfirmation = false;
-  final AuthHelper _authHelper = AuthHelper(); // Instantiate AuthHelper
+  final AuthService _authService = AuthService(); // Instantiate AuthService
+  // Removed state variables related to in-place password visibility and copying
 
   @override
   void didUpdateWidget(CustomItem oldWidget) {
@@ -46,16 +51,14 @@ class _CustomItemState extends State<CustomItem> {
     final bool isDocument = widget.documentItem != null;
     final String titleText;
     final DateTime addedOn;
-    final String subtitleText;
+    String? subtitleText; // Can be null if not applicable
 
     if (widget.documentItem != null) {
       final String formattedDate = DateFormat.yMMMd().format(
         widget.documentItem!.addedOn.toLocal(),
       );
       titleText = widget.documentItem!.name;
-      addedOn = widget
-          .documentItem!
-          .addedOn; // Not directly used in subtitle here, but good to have
+      addedOn = widget.documentItem!.addedOn;
       // Format the size for display
       subtitleText =
           "${formatBytes(widget.documentItem!.size, 2)} - $formattedDate";
@@ -64,9 +67,21 @@ class _CustomItemState extends State<CustomItem> {
         widget.passwordItem!.addedOn.toLocal(),
       );
       titleText = widget.passwordItem!.displayName;
-      addedOn =
-          widget.passwordItem!.addedOn; // Not directly used in subtitle here
-      subtitleText = "Added: $formattedDate";
+      addedOn = widget.passwordItem!.addedOn;
+      // Prioritize website for subtitle, then username, otherwise null.
+      List<String> subtitleParts = [];
+      if (widget.passwordItem!.websiteName.isNotEmpty) {
+        subtitleParts.add("Website: ${widget.passwordItem!.websiteName}");
+      }
+      if (widget.passwordItem!.userName.isNotEmpty) {
+        subtitleParts.add("Username: ${widget.passwordItem!.userName}");
+      }
+
+      if (subtitleParts.isNotEmpty) {
+        subtitleText = subtitleParts.join('\n');
+      } else {
+        subtitleText = null;
+      }
     } else {
       return const SizedBox.shrink(); // No item data provided
     }
@@ -76,9 +91,13 @@ class _CustomItemState extends State<CustomItem> {
       clipBehavior: Clip.none, // Allow action sheet to appear correctly
       children: <Widget>[
         GestureDetector(
-          onLongPress: isDocument && !widget.isEditing
+          onLongPress: !widget.isEditing
               ? () {
-                  _showDocumentContextMenu(context, widget.documentItem!);
+                  if (isDocument) {
+                    _showDocumentContextMenu(context, widget.documentItem!);
+                  } else if (widget.passwordItem != null) {
+                    _showPasswordContextMenu(context, widget.passwordItem!);
+                  }
                 }
               : null,
           child: CupertinoListTile.notched(
@@ -117,9 +136,12 @@ class _CustomItemState extends State<CustomItem> {
                                       .lock_fill // Corrected: lock_doc_fill
                                 : CupertinoIcons
                                       .doc_text_fill) // Unlocked document icon
-                          : CupertinoIcons.lock_fill, // Password icon
+                          : CupertinoIcons
+                                .lock_shield_fill, // Changed icon for passwords
                       size: 28.0,
-                      color: isDocument && widget.documentItem!.isLocked
+                      color:
+                          (isDocument && widget.documentItem!.isLocked) ||
+                              !isDocument
                           ? CupertinoColors.systemBlue.resolveFrom(
                               context,
                             ) // Highlight if locked
@@ -132,15 +154,29 @@ class _CustomItemState extends State<CustomItem> {
               overflow: TextOverflow.ellipsis,
               style: const TextStyle(fontSize: 19),
             ),
-            subtitle: Text(
-              subtitleText,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: TextStyle(
-                fontSize: 16,
-                color: CupertinoColors.secondaryLabel.resolveFrom(context),
-              ),
-            ),
+            subtitle: subtitleText != null
+                ? Padding(
+                    padding: const EdgeInsets.only(
+                      top: 4.0,
+                    ), // Add spacing between title and subtitle
+                    child: Text(
+                      subtitleText,
+                      maxLines:
+                          2, // Allow up to two lines for website and username
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize:
+                            13, // Slightly smaller font for subtitle details
+                        height:
+                            1.3, // Adjust line height for better readability if two lines
+                        color: CupertinoColors.secondaryLabel.resolveFrom(
+                          context,
+                        ),
+                      ),
+                    ),
+                  )
+                : null,
+            // additionalInfo is removed for passwords to consolidate info in subtitle
             trailing: (widget.isEditing || _showDeleteConfirmation)
                 ? null
                 : const CupertinoListTileChevron(),
@@ -154,21 +190,9 @@ class _CustomItemState extends State<CustomItem> {
                 }
                 // In edit mode, main tile tap might do nothing else, or something specific
               } else {
-                // Normal mode tap
-                if (isDocument && widget.documentItem!.isLocked) {
-                  _authHelper.authenticate(context).then((authenticated) {
-                    if (authenticated) {
-                      widget.onTap?.call();
-                    } else {
-                      // Optionally show a message if authentication fails
-                      // print("Authentication failed for locked document.");
-                      // AuthHelper already shows a dialog if master password is required and fails
-                    }
-                  });
-                } else {
-                  // If not locked or not a document, or if it's a password item
-                  widget.onTap?.call();
-                }
+                // Normal mode tap:
+                // For both documents and passwords, the onTap is now passed from the parent page
+                widget.onTap?.call();
               }
             },
           ),
@@ -253,12 +277,27 @@ class _CustomItemState extends State<CustomItem> {
         actions: <CupertinoActionSheetAction>[
           CupertinoActionSheetAction(
             child: Text(document.isLocked ? 'Unlock File' : 'Lock File'),
-            onPressed: () {
+            onPressed: () async {
               Navigator.pop(modalContext); // Pop using the modal's context
-              // Use the documentProvider instance obtained earlier
-              documentProvider.updateDocumentLockStatus(
-                document,
-                !document.isLocked,
+
+              // Authenticate before changing lock status
+              await _authService.authenticateAndExecute(
+                context: itemContext, // Use the item's context for auth dialogs
+                localizedReason: document.isLocked
+                    ? 'To unlock "${document.name}", please authenticate.'
+                    : 'To lock "${document.name}", please authenticate.',
+                itemName: document.name,
+                onAuthenticated: () async {
+                  // If authenticated, then update the lock status
+                  documentProvider.updateDocumentLockStatus(
+                    document,
+                    !document.isLocked,
+                  );
+                },
+                onNotAuthenticated: () async {
+                  // Optional: Handle if authentication fails or is cancelled
+                  print('Authentication failed for lock/unlock action.');
+                },
               );
             },
           ),
@@ -267,6 +306,51 @@ class _CustomItemState extends State<CustomItem> {
           child: const Text('Cancel'),
           onPressed: () {
             Navigator.pop(modalContext); // Pop using the modal's context
+          },
+        ),
+      ),
+    );
+  }
+
+  void _showPasswordContextMenu(
+    BuildContext itemContext,
+    PasswordItem passwordItem,
+  ) {
+    final passwordProvider = Provider.of<PasswordProvider>(
+      itemContext,
+      listen: false,
+    );
+
+    showCupertinoModalPopup<void>(
+      context: itemContext,
+      builder: (BuildContext modalContext) => CupertinoActionSheet(
+        title: Text(passwordItem.displayName),
+        message: Text(
+          "Username: ${passwordItem.userName}\nWebsite: ${passwordItem.websiteName}",
+        ),
+        actions: <CupertinoActionSheetAction>[
+          CupertinoActionSheetAction(
+            child: const Text('Edit Password'),
+            onPressed: () async {
+              Navigator.pop(modalContext); // Pop the action sheet
+              // Navigate to edit page
+              Navigator.of(itemContext).push(
+                CupertinoPageRoute(
+                  builder: (newContext) => ChangeNotifierProvider.value(
+                    value: passwordProvider, // Provide the existing instance
+                    child: AddEditPasswordPage(
+                      passwordItem: passwordItem,
+                    ),
+                  ),
+                ),
+              );
+            },
+          ),
+        ],
+        cancelButton: CupertinoActionSheetAction(
+          child: const Text('Cancel'),
+          onPressed: () {
+            Navigator.pop(modalContext);
           },
         ),
       ),

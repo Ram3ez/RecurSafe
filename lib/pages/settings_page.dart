@@ -4,6 +4,9 @@ import "package:local_auth/local_auth.dart";
 import "package:local_auth_ios/local_auth_ios.dart"; // For iOS specific messages
 import "package:local_auth_android/local_auth_android.dart"; // For Android specific messages
 import "package:recursafe/pages/master_password_page.dart"; // Import the new page
+import 'dart:io' show Platform; // Import Platform
+import 'package:recursafe/utils/constants.dart'; // Import AppConstants
+import 'package:recursafe/utils/dialog_utils.dart'; // Import DialogUtils
 
 class SettingsPage extends StatefulWidget {
   const SettingsPage({super.key});
@@ -15,59 +18,10 @@ class SettingsPage extends StatefulWidget {
 class _SettingsPageState extends State<SettingsPage> {
   final LocalAuthentication _localAuth = LocalAuthentication();
   final FlutterSecureStorage _secureStorage = const FlutterSecureStorage();
-  static const String _biometricEnabledKey = 'biometric_auth_enabled';
+  // static const String _biometricEnabledKey = 'biometric_auth_enabled'; // Replaced by AppConstants
 
   bool _biometricsEnabled = false;
   bool _isLoadingBiometricPreference = true;
-
-  // Placeholder for showing a confirmation dialog
-  Future<void> _showConfirmationDialog({
-    required String title,
-    required String content,
-    required VoidCallback onConfirm,
-  }) async {
-    return showCupertinoDialog<void>(
-      context: context,
-      builder: (BuildContext context) => CupertinoAlertDialog(
-        title: Text(title),
-        content: Text(content),
-        actions: <CupertinoDialogAction>[
-          CupertinoDialogAction(
-            child: const Text('Cancel'),
-            onPressed: () {
-              Navigator.of(context).pop();
-            },
-          ),
-          CupertinoDialogAction(
-            isDestructiveAction: true,
-            child: const Text('Confirm'),
-            onPressed: () {
-              onConfirm();
-              Navigator.of(context).pop();
-            },
-          ),
-        ],
-      ),
-    );
-  }
-
-  Future<void> _showInfoDialog(String title, String content) async {
-    return showCupertinoDialog<void>(
-      context: context,
-      builder: (BuildContext context) => CupertinoAlertDialog(
-        title: Text(title),
-        content: Text(content),
-        actions: <CupertinoDialogAction>[
-          CupertinoDialogAction(
-            child: const Text('OK'),
-            onPressed: () {
-              Navigator.of(context).pop();
-            },
-          ),
-        ],
-      ),
-    );
-  }
 
   @override
   void initState() {
@@ -76,24 +30,14 @@ class _SettingsPageState extends State<SettingsPage> {
   }
 
   Future<void> _loadBiometricPreference() async {
-    try {
-      final storedPreference = await _secureStorage.read(
-        key: _biometricEnabledKey,
-      );
-      if (mounted) {
-        setState(() {
-          _biometricsEnabled = storedPreference == 'true';
-          _isLoadingBiometricPreference = false;
-        });
-      }
-    } catch (e) {
-      print("Error loading biometric preference: $e");
-      if (mounted) {
-        setState(() {
-          _biometricsEnabled = false; // Assume disabled on error
-          _isLoadingBiometricPreference = false; // Stop loading
-        });
-      }
+    final storedPreference = await _secureStorage.read(
+      key: AppConstants.biometricEnabledKey,
+    );
+    if (mounted) {
+      setState(() {
+        _biometricsEnabled = storedPreference == 'true';
+        _isLoadingBiometricPreference = false;
+      });
     }
   }
 
@@ -104,7 +48,9 @@ class _SettingsPageState extends State<SettingsPage> {
         final bool isDeviceSupported = await _localAuth.isDeviceSupported();
 
         if (!isDeviceSupported || !canCheckBiometrics) {
-          await _showInfoDialog(
+          if (!mounted) return;
+          await DialogUtils.showInfoDialog(
+            context,
             'Biometrics Not Supported',
             'Your device does not support biometric authentication or it is not configured.',
           );
@@ -116,7 +62,9 @@ class _SettingsPageState extends State<SettingsPage> {
             .getAvailableBiometrics();
 
         if (availableBiometrics.isEmpty) {
-          await _showInfoDialog(
+          if (!mounted) return;
+          await DialogUtils.showInfoDialog(
+            context,
             'No Biometrics Enrolled',
             'Please enroll biometrics in your device settings first.',
           );
@@ -136,33 +84,95 @@ class _SettingsPageState extends State<SettingsPage> {
               cancelButton: 'Cancel',
             ),
           ],
-          options: const AuthenticationOptions(
+          options: AuthenticationOptions(
             stickyAuth: true, // Keep auth session active if app is backgrounded
-            biometricOnly: true, // Only allow biometrics, no device PIN/Pattern
+            // Windows doesn't support biometricOnly: true, it will use available Windows Hello methods.
+            biometricOnly: !Platform.isWindows,
           ),
         );
 
         if (authenticated) {
-          await _secureStorage.write(key: _biometricEnabledKey, value: 'true');
+          await _secureStorage.write(
+            key: AppConstants.biometricEnabledKey,
+            value: 'true',
+          );
           if (mounted) setState(() => _biometricsEnabled = true);
-          await _showInfoDialog('Success', 'Biometric authentication enabled.');
+          if (!mounted) return;
+          await DialogUtils.showInfoDialog(
+            context,
+            'Success',
+            'Biometric authentication enabled.',
+          );
         } else {
           if (mounted) setState(() => _biometricsEnabled = false);
-          await _showInfoDialog(
-            'Authentication Failed or Cancelled',
+          if (!mounted) return;
+          await DialogUtils.showInfoDialog(
+            context,
+            'Authentication Failed',
             'Could not enable biometrics.',
           );
         }
       } catch (e) {
         print("Error enabling biometrics: $e");
         if (mounted) setState(() => _biometricsEnabled = false);
-        await _showInfoDialog('Error', 'An error occurred: $e');
+        if (!mounted) return;
+        await DialogUtils.showInfoDialog(
+          context,
+          'Error',
+          'An error occurred: $e',
+        );
       }
     } else {
       // Disabling biometrics
-      await _secureStorage.delete(key: _biometricEnabledKey);
-      if (mounted) setState(() => _biometricsEnabled = false);
-      await _showInfoDialog('Success', 'Biometric authentication disabled.');
+      // First, require authentication to disable
+      try {
+        final bool authenticated = await _localAuth.authenticate(
+          localizedReason:
+              'Please authenticate to disable biometric login for RecurSafe.',
+          authMessages: const <AuthMessages>[
+            AndroidAuthMessages(
+              signInTitle: 'RecurSafe Biometric Confirmation',
+              cancelButton: 'Cancel',
+            ),
+            IOSAuthMessages(
+              cancelButton: 'Cancel',
+            ),
+          ],
+          options: AuthenticationOptions(
+            stickyAuth: true,
+            biometricOnly:
+                !Platform.isWindows, // Adhere to platform capabilities
+          ),
+        );
+
+        if (!mounted) return;
+
+        if (authenticated) {
+          await _secureStorage.delete(key: AppConstants.biometricEnabledKey);
+          if (mounted) setState(() => _biometricsEnabled = false);
+          await DialogUtils.showInfoDialog(
+            context,
+            'Success',
+            'Biometric authentication disabled.',
+          );
+        } else {
+          // Authentication failed, do not disable biometrics
+          await DialogUtils.showInfoDialog(
+            context,
+            'Authentication Failed',
+            'Biometric authentication was not disabled.',
+          );
+          // No change to _biometricsEnabled state here, as it wasn't disabled.
+        }
+      } catch (e) {
+        print("Error during biometric check for disabling: $e");
+        if (!mounted) return;
+        await DialogUtils.showInfoDialog(
+          context,
+          'Error',
+          'An error occurred while trying to disable biometrics. $e',
+        );
+      }
     }
   }
 
@@ -201,9 +211,7 @@ class _SettingsPageState extends State<SettingsPage> {
                         CupertinoIcons.lock_rotation,
                       ), // Or CupertinoIcons.hand_raised_fill / faceid
                       trailing: CupertinoSwitch(
-                        value:
-                            _biometricsEnabled ??
-                            false, // Safeguard against null
+                        value: _biometricsEnabled,
                         onChanged: _toggleBiometrics,
                       ),
                     ),
@@ -225,10 +233,12 @@ class _SettingsPageState extends State<SettingsPage> {
                         color: CupertinoColors.destructiveRed,
                       ),
                       onTap: () {
-                        _showConfirmationDialog(
+                        DialogUtils.showConfirmationDialog(
+                          context: context,
                           title: 'Clear All Documents?',
                           content:
                               'Are you sure you want to delete all documents? This action cannot be undone.',
+                          confirmActionText: 'Clear All',
                           onConfirm: () {
                             // TODO: Implement clear all documents logic
                             print('Clear All Documents confirmed');
@@ -246,10 +256,12 @@ class _SettingsPageState extends State<SettingsPage> {
                         color: CupertinoColors.destructiveRed,
                       ),
                       onTap: () {
-                        _showConfirmationDialog(
+                        DialogUtils.showConfirmationDialog(
+                          context: context,
                           title: 'Clear All Passwords?',
                           content:
                               'Are you sure you want to delete all passwords? This action cannot be undone.',
+                          confirmActionText: 'Clear All',
                           onConfirm: () {
                             // TODO: Implement clear all passwords logic
                             print('Clear All Passwords confirmed');

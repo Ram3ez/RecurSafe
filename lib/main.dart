@@ -46,6 +46,7 @@ Future<void> main() async {
     'documentsBox',
     encryptionCipher: HiveAesCipher(encryptionKey),
   );
+  //await Hive.deleteBoxFromDisk("passwordsBox");
   await Hive.openBox<PasswordItem>(
     'passwordsBox',
     encryptionCipher: HiveAesCipher(encryptionKey),

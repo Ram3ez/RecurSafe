@@ -4,6 +4,8 @@ import "package:recursafe/components/base_page.dart";
 import "package:recursafe/components/custom_item.dart";
 import "package:recursafe/providers/password_provider.dart";
 import "package:recursafe/items/password_item.dart";
+import "package:recursafe/pages/add_edit_password_page.dart";
+import "package:recursafe/pages/view_password_page.dart"; // Import the new page
 //import "package:flutter/foundation.dart"; // Import for kReleaseMode if needed later
 
 class PasswordPage extends StatefulWidget {
@@ -59,11 +61,16 @@ class _PasswordPageState extends State<PasswordPage> {
       onEdit: _toggleEditMode,
       onSearchChanged: _handleSearchChanged,
       onAdd: () {
-        context.read<PasswordProvider>().addPassword(
-          displayName: "test",
-          websiteName: "test2",
-          userName: "wow",
-          addedOn: DateTime.now(),
+        // For adding a new password
+        // Get the existing PasswordProvider instance from the current context
+        final passwordProvider = context.read<PasswordProvider>();
+        Navigator.of(context).push(
+          CupertinoPageRoute(
+            builder: (newContext) => ChangeNotifierProvider.value(
+              value: passwordProvider, // Provide the existing instance
+              child: const AddEditPasswordPage(),
+            ),
+          ),
         );
       },
       body: SliverList(
@@ -76,6 +83,21 @@ class _PasswordPageState extends State<PasswordPage> {
               // Optional: Show a confirmation dialog
               final passwordToDelete = filteredPasswords[index];
               context.read<PasswordProvider>().deletePassword(passwordToDelete);
+            },
+            onTap: () {
+              if (!_isEditing) {
+                final passwordProvider = context.read<PasswordProvider>();
+                Navigator.of(context).push(
+                  CupertinoPageRoute(
+                    builder: (newContext) => ChangeNotifierProvider.value(
+                      value: passwordProvider,
+                      child: ViewPasswordPage(
+                        passwordItem: filteredPasswords[index],
+                      ),
+                    ),
+                  ),
+                );
+              }
             },
           ),
         ),

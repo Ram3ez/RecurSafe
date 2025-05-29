@@ -9,6 +9,9 @@ import 'package:open_filex/open_filex.dart'; // Import open_filex
 import "package:file_picker/file_picker.dart"; // Import file_picker
 import 'package:path_provider/path_provider.dart'; // For getting app directory
 import 'package:path/path.dart' as p; // For path manipulation
+import 'package:recursafe/services/auth_service.dart'; // Import AuthService
+import 'package:recursafe/utils/constants.dart'; // Import AppConstants
+import 'package:recursafe/utils/dialog_utils.dart'; // Import DialogUtils
 
 class DocumentsPage extends StatefulWidget {
   const DocumentsPage({super.key});
@@ -20,6 +23,7 @@ class DocumentsPage extends StatefulWidget {
 class _DocumentsPageState extends State<DocumentsPage> {
   String _searchQuery = '';
   bool _isEditing = false;
+  final AuthService _authService = AuthService();
 
   void _handleSearchChanged(String query) {
     setState(() {
@@ -35,6 +39,23 @@ class _DocumentsPageState extends State<DocumentsPage> {
         // _searchQuery = '';
       }
     });
+  }
+
+  // Helper method to open document
+  void _openDocument(BuildContext pageContext, String path, String name) {
+    if (Platform.isIOS) {
+      OpenFilex.open(path);
+    } else {
+      // Navigate to the PDF viewer page on other platforms
+      Navigator.of(pageContext).push(
+        CupertinoPageRoute(
+          builder: (context) => PdfViewerPage(
+            filePath: path,
+            documentName: name,
+          ),
+        ),
+      );
+    }
   }
 
   @override
@@ -133,20 +154,24 @@ class _DocumentsPageState extends State<DocumentsPage> {
               final documentToDelete = filteredDocuments[index];
               context.read<DocumentProvider>().deleteDocument(documentToDelete);
             },
-            onTap: () {
+            onTap: () async {
               final document = filteredDocuments[index];
-              if (Platform.isIOS) {
-                OpenFilex.open(document.path);
-              } else {
-                // Navigate to the PDF viewer page on other platforms
-                Navigator.of(context).push(
-                  CupertinoPageRoute(
-                    builder: (context) => PdfViewerPage(
-                      filePath: document.path,
-                      documentName: document.name,
-                    ),
-                  ),
+              if (document.isLocked) {
+                await _authService.authenticateAndExecute(
+                  context: context,
+                  localizedReason:
+                      'To open "${document.name}", please authenticate.',
+                  itemName: document.name,
+                  onAuthenticated: () async {
+                    _openDocument(context, document.path, document.name);
+                  },
+                  onNotAuthenticated: () async {
+                    // Optional: specific action if not authenticated, dialog is shown by service
+                  },
                 );
+              } else {
+                // If the document is not locked, open it directly
+                _openDocument(context, document.path, document.name);
               }
             },
           ),

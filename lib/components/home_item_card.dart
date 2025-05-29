@@ -6,12 +6,16 @@ import 'dart:io' show Platform; // Import for platform checking
 import 'package:open_filex/open_filex.dart'; // Import open_filex
 import 'package:recursafe/pages/pdf_viewer_page.dart'; // Import PdfViewerPage
 import 'package:recursafe/utils/file_utils.dart'; // Import the utility
+import 'package:recursafe/services/auth_service.dart'; // Import AuthService
+import 'package:recursafe/utils/constants.dart'; // Import AppConstants
 
 class HomeItemCard extends StatelessWidget {
   final DocumentItem? documentItem;
   final PasswordItem? passwordItem;
 
-  const HomeItemCard({
+  final AuthService _authService = AuthService();
+
+  HomeItemCard({
     super.key,
     this.documentItem,
     this.passwordItem,
@@ -39,20 +43,54 @@ class HomeItemCard extends StatelessWidget {
         : formattedDate;
 
     return CupertinoButton(
-      onPressed: () {
+      onPressed: () async {
+        print(
+          "[HomeItemCard DEBUG] onPressed for item: $name, isDocument: $isDocument",
+        );
         if (isDocument) {
-          if (Platform.isIOS) {
-            OpenFilex.open(documentItem!.path);
-          } else {
-            // Navigate to PdfViewerPage for documents on other platforms
-            Navigator.of(context).push(
-              CupertinoPageRoute(
-                builder: (context) => PdfViewerPage(
-                  filePath: documentItem!.path,
-                  documentName: documentItem!.name,
-                ),
-              ),
+          if (documentItem!.isLocked) {
+            await _authService.authenticateAndExecute(
+              context: context,
+              localizedReason:
+                  'To open "${documentItem!.name}", please authenticate.',
+              itemName: documentItem!.name,
+              onAuthenticated: () async {
+                if (Platform.isIOS) {
+                  OpenFilex.open(documentItem!.path);
+                } else {
+                  // Ensure context is still valid before navigating
+                  if (context.mounted) {
+                    Navigator.of(context).push(
+                      CupertinoPageRoute(
+                        builder: (ctx) => PdfViewerPage(
+                          filePath: documentItem!.path,
+                          documentName: documentItem!.name,
+                        ),
+                      ),
+                    );
+                  }
+                }
+              },
+              onNotAuthenticated: () async {
+                // Optional: specific action if not authenticated, dialog is shown by service
+              },
             );
+          } else {
+            // If the document is not locked, open it directly
+            if (Platform.isIOS) {
+              OpenFilex.open(documentItem!.path);
+            } else {
+              if (context.mounted) {
+                Navigator.of(context).push(
+                  CupertinoPageRoute(
+                    builder: (ctx) => PdfViewerPage(
+                      filePath: documentItem!.path,
+                      documentName: documentItem!.name,
+                    ),
+                  ),
+                );
+              }
+            }
           }
         } else {
           print("Tapped on password card: ${passwordItem!.displayName}");

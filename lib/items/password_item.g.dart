@@ -20,14 +20,16 @@ class PasswordItemAdapter extends TypeAdapter<PasswordItem> {
       displayName: fields[0] as String,
       websiteName: fields[1] as String,
       userName: fields[2] as String,
-      addedOn: fields[3] as DateTime,
+      encryptedPassword: fields[3] as String,
+      addedOn: fields[4] as DateTime,
+      ivBase64: fields[5] as String?,
     );
   }
 
   @override
   void write(BinaryWriter writer, PasswordItem obj) {
     writer
-      ..writeByte(4)
+      ..writeByte(6)
       ..writeByte(0)
       ..write(obj.displayName)
       ..writeByte(1)
@@ -35,7 +37,11 @@ class PasswordItemAdapter extends TypeAdapter<PasswordItem> {
       ..writeByte(2)
       ..write(obj.userName)
       ..writeByte(3)
-      ..write(obj.addedOn);
+      ..write(obj.encryptedPassword)
+      ..writeByte(4)
+      ..write(obj.addedOn)
+      ..writeByte(5)
+      ..write(obj.ivBase64);
   }
 
   @override
