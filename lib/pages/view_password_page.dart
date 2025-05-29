@@ -185,29 +185,42 @@ class _ViewPasswordPageState extends State<ViewPasswordPage> {
     _websiteController.text = widget.passwordItem.websiteName;
     _userNameController.text = widget.passwordItem.userName;
     _passwordController.clear(); // Always clear password field for editing
-    await _authService.authenticateAndExecute(
-      context: context,
-      localizedReason:
-          'To edit password for "${widget.passwordItem.displayName}", please authenticate.',
-      itemName: widget.passwordItem.displayName,
-      onAuthenticated: () async {
-        if (mounted) {
-          setState(() {
-            _isEditing = true;
-            _isProcessing = false;
-            // If password was visible in view mode, hide it to avoid confusion with edit field
-            _isPasswordVisible = false;
-          });
-        }
-      },
-      onNotAuthenticated: () async {
-        if (mounted) setState(() => _isProcessing = false);
-        _showClipboardStatusMessage(
-          "Authentication Failed.",
-          isError: true,
-        );
-      },
-    );
+
+    // If password was already made visible (implying recent auth for viewing),
+    // proceed directly to edit mode. Otherwise, authenticate.
+    if (_isPasswordVisible) {
+      if (mounted) {
+        setState(() {
+          _isEditing = true;
+          _isProcessing = false;
+          // Hide the password from "view mode" to avoid confusion with the edit field's own visibility toggle
+          _isPasswordVisible = false;
+        });
+      }
+    } else {
+      await _authService.authenticateAndExecute(
+        context: context,
+        localizedReason:
+            'To edit password for "${widget.passwordItem.displayName}", please authenticate.',
+        itemName: widget.passwordItem.displayName,
+        onAuthenticated: () async {
+          if (mounted) {
+            setState(() {
+              _isEditing = true;
+              _isProcessing = false;
+              _isPasswordVisible = false; // Ensure it's hidden for edit mode
+            });
+          }
+        },
+        onNotAuthenticated: () async {
+          if (mounted) setState(() => _isProcessing = false);
+          _showClipboardStatusMessage(
+            "Authentication Failed.",
+            isError: true,
+          );
+        },
+      );
+    }
   }
 
   void _cancelEditMode() {
