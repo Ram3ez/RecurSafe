@@ -1,7 +1,6 @@
-import 'dart:convert';
-import 'package:crypto/crypto.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:recursafe/utils/crypto_utils.dart'; // Import the utility
 
 class MasterPasswordPage extends StatefulWidget {
   const MasterPasswordPage({super.key});
@@ -41,20 +40,14 @@ class _MasterPasswordPageState extends State<MasterPasswordPage> {
     }
   }
 
-  String _hashPassword(String password) {
-    final bytes = utf8.encode(password); // data being hashed
-    final digest = sha256.convert(bytes);
-    return digest.toString();
-  }
-
   Future<void> _setOrChangePassword() async {
     if (!_formKey.currentState!.validate()) {
       return;
     }
-
+    setState(() => _isLoading = true); // Show loading indicator
     if (_isPasswordSet) {
       final storedHash = await _secureStorage.read(key: _masterPasswordKey);
-      final oldPasswordHash = _hashPassword(_oldPasswordController.text);
+      final oldPasswordHash = hashPassword(_oldPasswordController.text);
       if (storedHash != oldPasswordHash) {
         _showErrorDialog('Incorrect old password.');
         return;
@@ -72,14 +65,20 @@ class _MasterPasswordPageState extends State<MasterPasswordPage> {
       return;
     }
 
-    final newPasswordHash = _hashPassword(_newPasswordController.text);
-    await _secureStorage.write(key: _masterPasswordKey, value: newPasswordHash);
-
-    _showSuccessDialog();
-    if (mounted) {
-      setState(() {
-        _isPasswordSet = true; // Update state after successful change/set
-      });
+    final newPasswordHash = hashPassword(_newPasswordController.text);
+    try {
+      await _secureStorage.write(
+        key: _masterPasswordKey,
+        value: newPasswordHash,
+      );
+      _showSuccessDialog();
+      if (mounted) {
+        setState(() {
+          _isPasswordSet = true; // Update state after successful change/set
+        });
+      }
+    } finally {
+      if (mounted) setState(() => _isLoading = false); // Hide loading indicator
     }
   }
 
@@ -239,10 +238,16 @@ class _MasterPasswordPageState extends State<MasterPasswordPage> {
                       Padding(
                         padding: const EdgeInsets.all(20.0),
                         child: CupertinoButton.filled(
-                          onPressed: _setOrChangePassword,
-                          child: Text(
-                            _isPasswordSet ? 'Change Password' : 'Set Password',
-                          ),
+                          onPressed: _isLoading ? null : _setOrChangePassword,
+                          child: _isLoading
+                              ? const CupertinoActivityIndicator(
+                                  color: CupertinoColors.white,
+                                )
+                              : Text(
+                                  _isPasswordSet
+                                      ? 'Change Password'
+                                      : 'Set Password',
+                                ),
                         ),
                       ),
                     ],

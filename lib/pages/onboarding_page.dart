@@ -1,5 +1,6 @@
 import 'package:flutter/cupertino.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:recursafe/utils/crypto_utils.dart'; // Import the utility
 
 class OnboardingPage extends StatefulWidget {
   final VoidCallback onOnboardingComplete;
@@ -55,15 +56,12 @@ class _OnboardingPageState extends State<OnboardingPage> {
     }
 
     try {
-      // IMPORTANT: For production, you should hash the password before storing it.
-      // Storing plain text passwords is a security risk.
-      // Consider using a package like `argon2_flutter` or `flutter_bcrypt`.
-      // Example: final hashedPassword = await Argon2.hashPasswordString(password);
-      // await _secureStorage.write(key: 'master_password_hash', value: hashedPassword);
+      final String hashedPassword = hashPassword(password);
+
       await _secureStorage.write(
-        key: 'master_password',
-        value: password,
-      ); // Storing plain for simplicity here
+        key: 'master_password_hash', // Use the same key as MasterPasswordPage
+        value: hashedPassword,
+      );
       await _secureStorage.write(key: 'onboarding_complete', value: 'true');
 
       print(
@@ -100,7 +98,8 @@ class _OnboardingPageState extends State<OnboardingPage> {
           child: Padding(
             padding: const EdgeInsets.all(20.0),
             child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
+              mainAxisAlignment:
+                  MainAxisAlignment.start, // Changed from center to start
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: <Widget>[
                 const SizedBox(

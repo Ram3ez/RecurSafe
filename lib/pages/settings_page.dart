@@ -11,6 +11,8 @@ import 'package:recursafe/providers/document_provider.dart'; // Import DocumentP
 import 'package:recursafe/providers/password_provider.dart'; // Import PasswordProvider
 import 'package:recursafe/utils/constants.dart'; // Import AppConstants
 import 'package:recursafe/services/notification_service.dart'; // Import NotificationService
+import 'package:recursafe/utils/crypto_utils.dart'; // Import for hashPassword
+import 'package:recursafe/notifiers/app_reset_notifier.dart'; // Import AppResetNotifier
 import 'package:recursafe/utils/dialog_utils.dart'; // Import DialogUtils
 
 class SettingsPage extends StatefulWidget {
@@ -197,6 +199,117 @@ class _SettingsPageState extends State<SettingsPage> {
     }
   }
 
+  // Method to verify master password via dialog
+  Future<bool> _verifyMasterPassword(BuildContext dialogParentContext) async {
+    final TextEditingController passwordController = TextEditingController();
+    String? dialogErrorMessage;
+
+    final bool? success = await showCupertinoDialog<bool>(
+      context: dialogParentContext,
+      builder: (BuildContext dialogContext) {
+        return StatefulBuilder(
+          builder: (stfContext, stfSetState) {
+            return CupertinoAlertDialog(
+              title: const Text('Enter Master Password'),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment:
+                    CrossAxisAlignment.stretch, // Stretch children horizontally
+                children: [
+                  const SizedBox(height: 12.0), // Added padding below title
+                  CupertinoTextField(
+                    controller: passwordController,
+                    placeholder: 'Master Password',
+                    obscureText: true,
+                    autocorrect: false,
+                    enableSuggestions: false,
+                    textAlign: TextAlign.start, // Align text to the start
+                    padding: const EdgeInsets.symmetric(
+                      vertical: 12.0,
+                      horizontal: 0.0,
+                    ),
+                    decoration: BoxDecoration(
+                      color: CupertinoColors.tertiarySystemFill.resolveFrom(
+                        stfContext,
+                      ), // iOS-like text field background
+                      borderRadius: BorderRadius.circular(8.0),
+                    ),
+                    prefix: const Padding(
+                      padding: EdgeInsets.only(left: 0.0),
+                      child: Icon(
+                        CupertinoIcons.lock_fill,
+                        color: CupertinoColors.secondaryLabel,
+                      ),
+                    ),
+                    style: TextStyle(
+                      color: CupertinoColors.label.resolveFrom(stfContext),
+                    ), // Ensure text color adapts
+                    placeholderStyle: TextStyle(
+                      color: CupertinoColors.placeholderText.resolveFrom(
+                        stfContext,
+                      ),
+                    ),
+                  ),
+                  if (dialogErrorMessage != null)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 8.0),
+                      child: Text(
+                        dialogErrorMessage!,
+                        style: const TextStyle(
+                          color: CupertinoColors.destructiveRed,
+                          fontSize: 12,
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+              actions: <CupertinoDialogAction>[
+                CupertinoDialogAction(
+                  child: const Text('Cancel'),
+                  onPressed: () {
+                    Navigator.of(dialogContext).pop(false); // Cancelled
+                  },
+                ),
+                CupertinoDialogAction(
+                  isDefaultAction: true,
+                  child: const Text('Verify'),
+                  onPressed: () async {
+                    final enteredPassword = passwordController.text;
+                    if (enteredPassword.isEmpty) {
+                      stfSetState(
+                        () => dialogErrorMessage = "Password cannot be empty.",
+                      );
+                      return;
+                    }
+                    final storedHash = await _secureStorage.read(
+                      key: AppConstants.masterPasswordKey,
+                    );
+                    if (storedHash == null) {
+                      print(
+                        "[ERROR] SettingsPage: Master password hash not found for verification.",
+                      );
+                      Navigator.of(dialogContext).pop(false); // System error
+                      return;
+                    }
+                    if (hashPassword(enteredPassword) == storedHash) {
+                      Navigator.of(dialogContext).pop(true); // Success
+                    } else {
+                      stfSetState(
+                        () => dialogErrorMessage = "Incorrect master password.",
+                      );
+                      passwordController.clear();
+                    }
+                  },
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+    return success ?? false; // Treat dialog dismissal as failure
+  }
+
   Future<void> _handleClearAll(
     String itemType,
     Future<void> Function() clearAction,
@@ -214,11 +327,16 @@ class _SettingsPageState extends State<SettingsPage> {
     if (confirmed != true || !mounted) return;
 
     // Step 2: Biometric Authentication
+    bool authenticated = false;
     try {
-      final bool authenticated = await _performBiometricAuth(
-        localizedReason: 'Please authenticate to clear all $itemType.',
-        androidSignInTitle: 'RecurSafe Clear Data',
-      );
+      if (_biometricsEnabled) {
+        authenticated = await _performBiometricAuth(
+          localizedReason: 'Please authenticate to clear all $itemType.',
+          androidSignInTitle: 'RecurSafe Clear Data',
+        );
+      } else {
+        authenticated = await _verifyMasterPassword(context);
+      }
 
       if (!mounted) return;
 
@@ -236,8 +354,8 @@ class _SettingsPageState extends State<SettingsPage> {
         if (mounted) {
           DialogUtils.showInfoDialog(
             context,
-            'Authentication Failed',
-            'Could not clear $itemType.',
+            'Action Incomplete',
+            '$itemType were not cleared as authentication was not successful or was cancelled.',
           );
         }
       }
@@ -265,11 +383,16 @@ class _SettingsPageState extends State<SettingsPage> {
 
     if (confirmed != true || !mounted) return;
 
+    bool authenticated = false;
     try {
-      final bool authenticated = await _performBiometricAuth(
-        localizedReason: 'Please authenticate to reset the app.',
-        androidSignInTitle: 'RecurSafe App Reset',
-      );
+      if (_biometricsEnabled) {
+        authenticated = await _performBiometricAuth(
+          localizedReason: 'Please authenticate to reset the app.',
+          androidSignInTitle: 'RecurSafe App Reset',
+        );
+      } else {
+        authenticated = await _verifyMasterPassword(context);
+      }
 
       if (!mounted) return;
 
@@ -298,16 +421,19 @@ class _SettingsPageState extends State<SettingsPage> {
         // Send notification before closing
         await NotificationService.showSimpleNotification(
           title: 'RecurSafe App Reset',
-          body: 'All app data has been successfully cleared.',
+          body: 'All app data has been successfully cleared. Setting up fresh.',
         );
 
-        SystemNavigator.pop(); // Close the app
+        // Notify AppController to show onboarding
+        Provider.of<AppResetNotifier>(context, listen: false).notifyReset();
+
+        // SystemNavigator.pop(); // Removed: Not suitable for iOS and now handled by AppResetNotifier
       } else {
         if (!mounted) return;
         await DialogUtils.showInfoDialog(
           context,
-          'Authentication Failed',
-          'App reset was cancelled.',
+          'Action Incomplete',
+          'App reset was not completed as authentication was not successful or was cancelled.',
         );
       }
     } catch (e) {

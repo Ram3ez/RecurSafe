@@ -21,6 +21,9 @@ class NotificationService {
       requestAlertPermission: true,
       requestBadgePermission: true,
       requestSoundPermission: true,
+      defaultPresentAlert: true, // Show alert when app is in foreground
+      defaultPresentBadge: true, // Update badge when app is in foreground
+      defaultPresentSound: true, // Play sound when app is in foreground
       // onDidReceiveLocalNotification: onDidReceiveLocalNotification, // Optional: for older iOS versions
     );
 

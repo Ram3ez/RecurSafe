@@ -3,6 +3,7 @@ import "package:flutter/cupertino.dart";
 import "package:flutter/foundation.dart";
 import "package:flutter/material.dart";
 import "package:provider/provider.dart";
+import "package:recursafe/notifiers/app_reset_notifier.dart";
 import "package:recursafe/pages/documents_page.dart";
 import "package:recursafe/pages/home_page.dart";
 import "package:recursafe/pages/password_page.dart";
@@ -94,13 +95,18 @@ Future<void> main() async {
   runApp(
     DevicePreview(
       enabled: !kReleaseMode, // Enable DevicePreview only in non-release modes
-      builder: (context) => AppController(
-        initialOnboardingComplete: onboardingCompleteFlag == 'true',
+      builder: (context) => ChangeNotifierProvider(
+        // Wrap AppController with ChangeNotifierProvider
+        create: (_) => AppResetNotifier(),
+        child: AppController(
+          initialOnboardingComplete: onboardingCompleteFlag == 'true',
+        ),
       ),
     ),
   );
 }
 
+// AppController remains in main.dart but needs Provider import and logic changes
 class AppController extends StatefulWidget {
   final bool initialOnboardingComplete;
   const AppController({super.key, required this.initialOnboardingComplete});
@@ -120,8 +126,24 @@ class _AppControllerState extends State<AppController> {
       print("[DEBUG] AppController: Initializing - Onboarding required.");
     } else {
       print(
-        "[DEBUG] AppController: Initializing - Onboarding already complete. Showing main app.",
+        "[DEBUG] AppController: Initializing - Onboarding already complete.",
       );
+    }
+    // Listen to AppResetNotifier
+    Provider.of<AppResetNotifier>(
+      context,
+      listen: false,
+    ).addListener(_handleAppResetTrigger);
+  }
+
+  void _handleAppResetTrigger() {
+    if (mounted) {
+      setState(() {
+        _showOnboarding = true;
+        print(
+          "[DEBUG] AppController: App reset event received, switching to OnboardingPage.",
+        );
+      });
     }
   }
 
@@ -132,6 +154,15 @@ class _AppControllerState extends State<AppController> {
         "[DEBUG] AppController: Onboarding completed by user, switching to MainApplicationScaffold.",
       );
     });
+  }
+
+  @override
+  void dispose() {
+    Provider.of<AppResetNotifier>(
+      context,
+      listen: false,
+    ).removeListener(_handleAppResetTrigger);
+    super.dispose();
   }
 
   @override
@@ -178,7 +209,7 @@ class MainApplicationScaffold extends StatelessWidget {
           BottomNavigationBarItem(icon: Icon(CupertinoIcons.home)),
           BottomNavigationBarItem(icon: Icon(CupertinoIcons.folder_fill)),
           BottomNavigationBarItem(
-            icon: Icon(CupertinoIcons.lock_fill, size: 28),
+            icon: Icon(Icons.key_rounded, size: 36),
           ), // Changed to Cupertino icon
           BottomNavigationBarItem(icon: Icon(CupertinoIcons.settings)),
         ],
