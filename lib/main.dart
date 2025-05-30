@@ -94,7 +94,7 @@ Future<void> main() async {
 
   runApp(
     DevicePreview(
-      enabled: !kReleaseMode, // Enable DevicePreview only in non-release modes
+      enabled: false, // Temporarily disable DevicePreview
       builder: (context) => ChangeNotifierProvider(
         // Wrap AppController with ChangeNotifierProvider
         create: (_) => AppResetNotifier(),
