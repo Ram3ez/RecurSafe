@@ -70,9 +70,18 @@ class NotificationService {
       // The AppUserModelId is crucial for Windows notifications to work correctly.
     );
 
+    // Define iOS notification details to ensure foreground presentation
+    const DarwinNotificationDetails darwinNotificationDetails =
+        DarwinNotificationDetails(
+          presentAlert: true, // Ensure alert is shown in foreground
+          presentBadge: true, // Ensure badge is updated in foreground
+          presentSound: true, // Ensure sound is played in foreground
+        );
+
     const NotificationDetails notificationDetails = NotificationDetails(
       android: androidNotificationDetails,
       windows: windowsNotificationDetails,
+      iOS: darwinNotificationDetails, // Add iOS specific details
     );
 
     await _notificationsPlugin.show(
