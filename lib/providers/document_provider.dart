@@ -107,7 +107,7 @@ class DocumentProvider extends ChangeNotifier {
     if (kDebugMode) {
       print("Encrypted and saved file to: $encryptedFilePath");
     }
-    return encryptedFilePath;
+    return uniqueEncryptedFileName; // Return only the base name
   }
 
   Future<void> addDocument({
@@ -121,7 +121,8 @@ class DocumentProvider extends ChangeNotifier {
     await _setLoading(true);
 
     // Encrypt and save the file, get the path to the encrypted version
-    final encryptedFilePath = await _encryptAndSaveFile(
+    final uniqueEncryptedFileName = await _encryptAndSaveFile(
+      // This now returns the base name
       sourcePlatformPath,
       originalFileName,
     );
@@ -133,7 +134,8 @@ class DocumentProvider extends ChangeNotifier {
     final newDocument = DocumentItem(
       // id: id, // If your DocumentItem has an ID field managed by HiveObject, it's often implicit
       name: originalFileName, // User-facing name
-      fileName: encryptedFilePath, // Store the FULL PATH to the ENCRYPTED file
+      fileName:
+          uniqueEncryptedFileName, // Store only the base name of the ENCRYPTED file
       size: size,
       addedOn: addedOn,
       isLocked: isLocked,
@@ -153,8 +155,9 @@ class DocumentProvider extends ChangeNotifier {
     final box = Hive.box<DocumentItem>(_boxName);
 
     try {
-      // document.fileName now holds the full path to the encrypted file
-      final file = File(document.fileName);
+      // Reconstruct the full path to the encrypted file
+      final fullPath = p.join(_encryptedDocumentsDirPath, document.fileName);
+      final file = File(fullPath);
       if (await file.exists()) {
         await file.delete();
       }
@@ -170,7 +173,8 @@ class DocumentProvider extends ChangeNotifier {
     // Or, if you used a custom ID as key when putting:
     String? keyToDelete;
     for (var entry in box.toMap().entries) {
-      if (entry.value.fileName == document.fileName &&
+      if (entry.value.fileName ==
+              document.fileName && // fileName is now base name
           entry.value.name == document.name &&
           entry.value.addedOn == document.addedOn) {
         // Match more robustly
@@ -188,7 +192,7 @@ class DocumentProvider extends ChangeNotifier {
 
     _documents.removeWhere(
       (doc) =>
-          doc.fileName == document.fileName &&
+          doc.fileName == document.fileName && // fileName is now base name
           doc.name == document.name &&
           doc.addedOn == document.addedOn,
     );
@@ -207,7 +211,7 @@ class DocumentProvider extends ChangeNotifier {
       // This scenario should ideally be avoided by working with Hive-managed instances.
       final box = Hive.box<DocumentItem>(_boxName);
       // Find the key and update (more complex, better to ensure `document` is from Hive)
-      String? keyToUpdate;
+      dynamic keyToUpdate; // Key can be int or String
       for (var entry in box.toMap().entries) {
         if (entry.value.fileName == document.fileName &&
             entry.value.name == document.name &&
@@ -230,13 +234,16 @@ class DocumentProvider extends ChangeNotifier {
   Future<String> getAccessibleDocumentPath(DocumentItem document) async {
     if (!_isEncryptedDirInitialized) await _initEncryptedDocumentsDirectory();
 
-    final encryptedFile = File(
+    // Reconstruct the full path to the encrypted file
+    final fullEncryptedPath = p.join(
+      _encryptedDocumentsDirPath,
       document.fileName,
-    ); // document.fileName is the path to the encrypted file
+    );
+    final encryptedFile = File(fullEncryptedPath);
 
     if (!await encryptedFile.exists()) {
       throw Exception(
-        "Encrypted document file '${p.basename(document.fileName)}' not found at ${document.fileName}.",
+        "Encrypted document file '${document.fileName}' not found at $fullEncryptedPath.",
       );
     }
 
@@ -246,7 +253,7 @@ class DocumentProvider extends ChangeNotifier {
     if (fileBytesWithIv.length < 16) {
       // IV is 16 bytes
       throw Exception(
-        "Encrypted file is too short to contain IV: ${document.fileName}",
+        "Encrypted file '${document.fileName}' is too short to contain IV.",
       );
     }
 
@@ -322,14 +329,17 @@ class DocumentProvider extends ChangeNotifier {
     // Delete files from filesystem
     for (final document in _documents) {
       try {
-        // document.fileName is the full path to the encrypted file
-        final file = File(document.fileName);
+        // Reconstruct the full path to the encrypted file
+        final fullPath = p.join(_encryptedDocumentsDirPath, document.fileName);
+        final file = File(fullPath);
         if (await file.exists()) {
           await file.delete();
         }
       } catch (e) {
         if (kDebugMode) {
-          print("Error deleting file ${document.fileName} from filesystem: $e");
+          print(
+            "Error deleting file ${document.fileName} from filesystem: $e",
+          );
         }
         // Continue even if a file deletion fails, to clear the DB
       }
