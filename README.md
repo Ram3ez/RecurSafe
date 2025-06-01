@@ -1,6 +1,4 @@
-# RecurSafe
-
-![RecurSafe App Icon](assets/icon.png)
+<img src="assets/icon.png" alt="RecurSafe App Icon" width="50" style="vertical-align: middle; margin-right: 10px;" /> # RecurSafe
 
 RecurSafe is a secure mobile application built with Flutter, designed to help you manage and protect your sensitive documents and passwords locally on your device. It emphasizes privacy and security by storing data encrypted on your device.
 
@@ -81,4 +79,4 @@ Don't forget to give the project a star! Thanks again!
 This project is licensed under the MIT License - see the `LICENSE` file for details.
 Copyright (c) 2025 Ram3ez.
 
-Project Link: https://github.com/Ram3ez/RecurSafe
+Project Link: https://github.com/ram3ez/recursafe
