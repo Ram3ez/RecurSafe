@@ -1,4 +1,5 @@
 import 'package:flutter/cupertino.dart';
+import 'dart:io'; // Import for File operations
 import 'package:pdfx/pdfx.dart'; // Import the pdfx package
 
 class PdfViewerPage extends StatefulWidget {
@@ -35,6 +36,18 @@ class _PdfViewerPageState extends State<PdfViewerPage> {
   void dispose() {
     // Dispose the controller when the widget is removed
     _pdfController.dispose();
+
+    // Delete the temporary file
+    try {
+      final tempFile = File(widget.filePath);
+      if (tempFile.existsSync()) {
+        tempFile
+            .deleteSync(); // Using sync here as dispose is typically synchronous
+        print("Temporary PDF file deleted: ${widget.filePath}");
+      }
+    } catch (e) {
+      print("Error deleting temporary PDF file ${widget.filePath}: $e");
+    }
     super.dispose();
   }
 

@@ -14,6 +14,7 @@ import "package:hive_flutter/hive_flutter.dart";
 import "package:recursafe/items/document_item.dart";
 import "package:recursafe/items/password_item.dart";
 import "package:flutter_secure_storage/flutter_secure_storage.dart";
+import 'dart:typed_data'; // For Uint8List
 import 'package:recursafe/services/notification_service.dart'; // Import NotificationService
 import "dart:convert";
 import "package:recursafe/pages/onboarding_page.dart";
@@ -49,12 +50,12 @@ Future<void> main() async {
       key: 'hive_encryption_key',
       value: base64UrlEncode(key),
     );
-    encryptionKeyString = base64UrlEncode(
-      key,
-    ); // Update variable with newly generated key
+    // Re-assign encryptionKeyString after generating and storing a new key
+    // to ensure it's not null for the base64Url.decode call.
+    encryptionKeyString = await secureStorage.read(key: 'hive_encryption_key');
     print("[DEBUG] main: New 'hive_encryption_key' generated and stored.");
   }
-  final encryptionKey = base64Url.decode(encryptionKeyString);
+  final encryptionKey = base64Url.decode(encryptionKeyString!);
 
   // Open encrypted boxes
   //await Hive.deleteBoxFromDisk("documentsBox");
@@ -92,6 +93,9 @@ Future<void> main() async {
     "[DEBUG] main: Onboarding complete flag from secure storage: $onboardingCompleteFlag",
   );
 
+  // Make key available for AppController
+  final Uint8List finalEncryptionKey = encryptionKey;
+
   runApp(
     DevicePreview(
       enabled: false, // Temporarily disable DevicePreview
@@ -100,6 +104,7 @@ Future<void> main() async {
         create: (_) => AppResetNotifier(),
         child: AppController(
           initialOnboardingComplete: onboardingCompleteFlag == 'true',
+          encryptionKey: finalEncryptionKey,
         ),
       ),
     ),
@@ -109,8 +114,13 @@ Future<void> main() async {
 // AppController remains in main.dart but needs Provider import and logic changes
 class AppController extends StatefulWidget {
   final bool initialOnboardingComplete;
-  const AppController({super.key, required this.initialOnboardingComplete});
+  final Uint8List encryptionKey;
 
+  const AppController({
+    super.key,
+    required this.initialOnboardingComplete,
+    required this.encryptionKey,
+  });
   @override
   State<AppController> createState() => _AppControllerState();
 }
@@ -176,8 +186,13 @@ class _AppControllerState extends State<AppController> {
       // The main application content, now wrapped with providers here
       homeWidget = MultiProvider(
         providers: [
-          ChangeNotifierProvider(create: (context) => DocumentProvider()),
-          ChangeNotifierProvider(create: (context) => PasswordProvider()),
+          ChangeNotifierProvider(
+            create: (context) =>
+                DocumentProvider(encryptionKey: widget.encryptionKey),
+          ),
+          ChangeNotifierProvider(
+            create: (context) => PasswordProvider(),
+          ), // Assuming PasswordProvider uses Hive's encryption directly
         ],
         child: const MainApplicationScaffold(),
       );

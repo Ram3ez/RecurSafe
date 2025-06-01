@@ -4,14 +4,10 @@ import "package:recursafe/components/base_page.dart";
 import "package:recursafe/components/custom_item.dart";
 import "package:recursafe/pages/pdf_viewer_page.dart";
 import "package:recursafe/providers/document_provider.dart";
-import 'dart:io' show Platform, Directory, File; // Import for platform checking
+import 'dart:io' show Platform, File; // Directory no longer needed here
 import 'package:open_filex/open_filex.dart'; // Import open_filex
 import "package:file_picker/file_picker.dart"; // Import file_picker
-import 'package:path_provider/path_provider.dart'; // For getting app directory
-import 'package:path/path.dart' as p; // For path manipulation
 import 'package:recursafe/services/auth_service.dart'; // Import AuthService
-import 'package:recursafe/items/document_item.dart'
-    show kDocumentsSubDir; // Import kDocumentsSubDir
 import 'package:recursafe/utils/dialog_utils.dart'; // Import DialogUtils
 
 class DocumentsPage extends StatefulWidget {
@@ -44,22 +40,38 @@ class _DocumentsPageState extends State<DocumentsPage> {
 
   // Helper method to open document
   void _openDocument(
-    BuildContext pageContext,
-    String accessiblePath,
-    String documentName,
-  ) {
+    BuildContext pageContext, // Renamed from context to avoid conflict
+    String accessibleTempPath, // This is the path to the temp decrypted file
+    String documentName, // Original document name for display
+  ) async {
     if (Platform.isIOS) {
-      OpenFilex.open(accessiblePath);
+      final result = await OpenFilex.open(accessibleTempPath);
+      // For iOS with OpenFilex, deleting the temp file immediately might be problematic.
+      // The OS will eventually clean temp. Consider logging result.
+      print("OpenFilex result: ${result.message}");
+      // Optionally, you could try to delete accessibleTempPath after a delay or
+      // rely on OS cleanup of its temp directory.
     } else {
       // Navigate to the PDF viewer page on other platforms
       Navigator.of(pageContext).push(
         CupertinoPageRoute(
           builder: (_) => PdfViewerPage(
-            filePath: accessiblePath,
+            filePath: accessibleTempPath, // Pass temp path
             documentName: documentName,
+            // PdfViewerPage will handle deleting this temp file on dispose
           ),
         ),
       );
+    }
+  }
+
+  // Helper to attempt deletion of a temporary file, e.g., after OpenFilex or if navigation fails
+  void _tryDeleteTempFile(String path) async {
+    try {
+      final file = File(path);
+      if (await file.exists()) await file.delete();
+    } catch (e) {
+      print("Error deleting temp file $path: $e");
     }
   }
 
@@ -99,54 +111,57 @@ class _DocumentsPageState extends State<DocumentsPage> {
                 return; // Check if the widget is still in the tree
               }
 
-              // 1. Get the application's documents directory
-              final appDir = await getApplicationDocumentsDirectory();
-              // 2. Create a subdirectory for your app's documents if it doesn't exist
-              final documentsAppDir = Directory(
-                // Use the constant
-                p.join(appDir.path, kDocumentsSubDir),
-              );
-              if (!await documentsAppDir.exists()) {
-                await documentsAppDir.create(recursive: true);
-              }
-              // 3. Define the new path for the copied file
-              // Using the original file name. You might want to add a timestamp or UUID for uniqueness if needed.
-              final newFileName = file.name;
-              final newFilePath = p.join(documentsAppDir.path, newFileName);
-
-              // 4. Copy the file
-              final originalFile = File(file.path!);
-              await originalFile.copy(newFilePath);
-
-              // 5. Add the document using the new path (path of the copied file)
+              // DocumentProvider now handles encryption and storage.
+              // Pass the source path (file.path!) from the picker.
               if (!context.mounted) {
                 return; // Check if the widget is still in the tree
               }
               context.read<DocumentProvider>().addDocument(
-                originalFileName: file.name, // Use originalFileName
-                copiedFilePath: newFilePath, // Use copiedFilePath
+                originalFileName: file.name,
+                sourcePlatformPath:
+                    file.path!, // Path of the picked (unencrypted) file
                 size: file.size, // size is in bytes (int)
                 addedOn: DateTime.now(),
               );
             } else if (file.bytes != null) {
-              // Handle web or cases where only bytes are available (less common for local PDF picking)
+              // Handle web or cases where only bytes are available
               // This part would require saving bytes to a file, similar to above.
+              // For now, show an info dialog.
+              if (mounted) {
+                DialogUtils.showInfoDialog(
+                  context,
+                  "Info",
+                  "Adding files from memory/bytes is not yet fully supported in this flow. Please pick a file from device storage.",
+                );
+              }
               print(
                 "File picked as bytes. Saving from bytes is not yet implemented in this example.",
               );
             } else {
               // Handle cases where path is null (e.g., web, some cloud files)
-              // You might want to show a dialog or snackbar
+              if (mounted) {
+                DialogUtils.showInfoDialog(
+                  context,
+                  "Error",
+                  "Could not get file path to add document.",
+                );
+              }
               print("File path is null. Cannot add document.");
-              // Example: ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Could not get file path.")));
             }
           } else {
             // User canceled the picker
             print("User canceled file picking.");
           }
         } catch (e) {
-          // Handle any errors during file picking
-          print("Error picking file: $e");
+          // Handle any errors during file picking or adding
+          if (mounted) {
+            DialogUtils.showInfoDialog(
+              context,
+              "Error",
+              "Error picking or adding file: $e",
+            );
+          }
+          print("Error during file picking/adding: $e");
         }
       },
       body: SliverList(
@@ -195,26 +210,42 @@ class _DocumentsPageState extends State<DocumentsPage> {
                   onAuthenticated: () async {
                     final accessiblePath = await documentProvider
                         .getAccessibleDocumentPath(document);
-                    if (!context.mounted) return;
+                    if (!context.mounted) {
+                      _tryDeleteTempFile(
+                        accessiblePath,
+                      ); // Attempt cleanup if context lost
+                      return;
+                    }
                     await documentProvider.updateLastOpened(
                       document,
                     ); // Update lastOpened
-                    if (!context.mounted) return;
-                    _openDocument(context, accessiblePath, document.name);
+                    if (!context.mounted) {
+                      _tryDeleteTempFile(accessiblePath); // Attempt cleanup
+                      return;
+                    }
+                    // Use this.context to avoid shadowing if pageContext was named 'context'
+                    _openDocument(this.context, accessiblePath, document.name);
                   },
                   onNotAuthenticated: () async {
                     // Optional: specific action if not authenticated, dialog is shown by service
                   },
                 );
               } else {
+                // Document is not locked
                 final accessiblePath = await documentProvider
                     .getAccessibleDocumentPath(document);
-                if (!context.mounted) return;
+                if (!context.mounted) {
+                  _tryDeleteTempFile(accessiblePath); // Attempt cleanup
+                  return;
+                }
                 await documentProvider.updateLastOpened(
                   document,
                 ); // Update lastOpened
-                if (!context.mounted) return;
-                _openDocument(context, accessiblePath, document.name);
+                if (!context.mounted) {
+                  _tryDeleteTempFile(accessiblePath); // Attempt cleanup
+                  return;
+                }
+                _openDocument(this.context, accessiblePath, document.name);
               }
             },
           ),

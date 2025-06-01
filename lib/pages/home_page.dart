@@ -3,17 +3,13 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:recursafe/components/custom_button.dart';
-import 'package:recursafe/items/document_item.dart'
-    show DocumentItem, kDocumentsSubDir; // Import kDocumentsSubDir
+import 'package:recursafe/items/document_item.dart' show DocumentItem;
 import 'package:recursafe/components/home_item_card.dart'; // Import the new card widget
 import 'package:recursafe/items/password_item.dart';
 import 'package:recursafe/utils/dialog_utils.dart'; // For showing error dialogs
 import 'package:recursafe/providers/document_provider.dart';
 import 'package:recursafe/providers/password_provider.dart';
 import 'package:recursafe/pages/add_edit_password_page.dart'; // Import for Add Password shortcut
-import 'dart:io' show Directory, File; // Import for Directory and File
-import 'package:path_provider/path_provider.dart'; // For getting app directory
-import 'package:path/path.dart' as p; // For path manipulation
 import 'package:file_picker/file_picker.dart'; // Import file_picker
 
 class HomePage extends StatelessWidget {
@@ -225,49 +221,41 @@ class HomePage extends StatelessWidget {
                               result.files.single.path != null) {
                             PlatformFile file = result.files.first;
 
-                            if (!context.mounted) return;
-
-                            // 1. Get the application's documents directory
-                            final appDir =
-                                await getApplicationDocumentsDirectory();
-                            // 2. Create a subdirectory for your app's documents if it doesn't exist
-                            final documentsAppDir = Directory(
-                              // Use the constant
-                              p.join(appDir.path, kDocumentsSubDir),
-                            );
-                            if (!await documentsAppDir.exists()) {
-                              await documentsAppDir.create(recursive: true);
-                            }
-                            // 3. Define the new path for the copied file
-                            final newFileName = file.name;
-                            final newFilePath = p.join(
-                              documentsAppDir.path,
-                              newFileName,
-                            );
-
-                            // 4. Copy the file
-                            final originalFile = File(file.path!);
-                            await originalFile.copy(newFilePath);
-
-                            // 5. Add the document using the new path
-                            if (!context.mounted) return;
+                            // DocumentProvider now handles encryption and storage.
+                            // Pass the source path (file.path!) from the picker.
+                            if (!context.mounted) return; // Check mounted state
                             documentProvider.addDocument(
-                              originalFileName:
-                                  file.name, // Pass the original name
-                              copiedFilePath:
-                                  newFilePath, // Pass the full path where it was copied
+                              originalFileName: file.name,
+                              sourcePlatformPath: file
+                                  .path!, // Path of the picked (unencrypted) file
                               size: file.size,
                               addedOn: DateTime.now(),
                             );
                             print(
                               "Document Added via Home Shortcut: ${file.name}",
                             );
-                          } else if (result != null &&
-                              result.files.single.bytes != null) {
+                          } else if (result?.files.single.bytes != null) {
+                            // Handle web or cases where only bytes are available
+                            if (context.mounted) {
+                              DialogUtils.showInfoDialog(
+                                context,
+                                "Info",
+                                "Adding files from memory/bytes is not yet fully supported. Please pick a file from device storage.",
+                              );
+                            }
                             print(
                               "File picked as bytes. Saving from bytes is not yet implemented in this example.",
                             );
-                          } else if (result != null) {
+                          } else if (result != null &&
+                              result.files.single.path == null) {
+                            // Handle cases where path is null but result is not (e.g., some cloud files)
+                            if (context.mounted) {
+                              DialogUtils.showInfoDialog(
+                                context,
+                                "Error",
+                                "Could not get file path to add document.",
+                              );
+                            }
                             print("File path is null. Cannot add document.");
                           } else {
                             // User canceled the picker

@@ -38,6 +38,11 @@ class BasePage extends StatelessWidget {
               onPressed: onAdd,
               child: Icon(CupertinoIcons.add),
             ),
+            onSearchableBottomTap: (val) {
+              if (!val) {
+                onSearchChanged!("");
+              }
+            },
             searchField: CupertinoSearchTextField(
               autofocus: true,
               placeholder: searchPlaceholder,

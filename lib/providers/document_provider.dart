@@ -1,18 +1,34 @@
 import 'dart:io';
+import 'dart:typed_data'; // For Uint8List
 import 'package:flutter/foundation.dart';
 import 'package:hive/hive.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:path/path.dart' as p;
 import 'package:recursafe/items/document_item.dart';
 import 'package:uuid/uuid.dart'; // For generating unique IDs
+import 'package:encrypt/encrypt.dart' as enc; // For encryption
 
 class DocumentProvider extends ChangeNotifier {
   List<DocumentItem> _documents = [];
   final String _boxName = 'documentsBox';
   bool _isLoading = false;
+  final Uint8List _encryptionKey;
+  late final String _encryptedDocumentsDirPath;
+  bool _isEncryptedDirInitialized = false;
 
-  DocumentProvider() {
-    loadDocuments();
+  // Define a subdirectory for encrypted files, distinct from kDocumentsSubDir
+  static const String _kEncryptedFilesSubDir = "recursafeDocs";
+
+  DocumentProvider({required Uint8List encryptionKey})
+    : _encryptionKey = encryptionKey {
+    _initialize();
+  }
+
+  Future<void> _initialize() async {
+    // Initialize the directory path for encrypted files
+    await _initEncryptedDocumentsDirectory();
+    // Load documents from Hive
+    await loadDocuments();
   }
 
   List<DocumentItem> get documents => _documents;
@@ -24,6 +40,28 @@ class DocumentProvider extends ChangeNotifier {
     Future.microtask(() => notifyListeners());
   }
 
+  enc.Encrypter _getEncrypter() {
+    final key = enc.Key(_encryptionKey);
+    // Using AES-CBC with PKCS7 padding. IV will be generated per file.
+    return enc.Encrypter(enc.AES(key, mode: enc.AESMode.cbc, padding: 'PKCS7'));
+  }
+
+  Future<void> _initEncryptedDocumentsDirectory() async {
+    if (_isEncryptedDirInitialized) return;
+    final appDir = await getApplicationDocumentsDirectory();
+    _encryptedDocumentsDirPath = p.join(appDir.path, _kEncryptedFilesSubDir);
+    final dir = Directory(_encryptedDocumentsDirPath);
+    if (!await dir.exists()) {
+      await dir.create(recursive: true);
+      if (kDebugMode) {
+        print(
+          "Created encrypted documents directory: $_encryptedDocumentsDirPath",
+        );
+      }
+    }
+    _isEncryptedDirInitialized = true;
+  }
+
   Future<void> loadDocuments() async {
     await _setLoading(true);
     final box = await Hive.openBox<DocumentItem>(_boxName);
@@ -33,37 +71,76 @@ class DocumentProvider extends ChangeNotifier {
     await _setLoading(false);
   }
 
-  Future<String> getFullPathForDocumentFile(DocumentItem document) async {
-    final appDocDir = await getApplicationDocumentsDirectory();
-    return p.join(appDocDir.path, kDocumentsSubDir, document.fileName);
+  // This method is no longer accurate as document.fileName IS the full path.
+  // Future<String> getFullPathForDocumentFile(DocumentItem document) async {
+  //   final appDocDir = await getApplicationDocumentsDirectory();
+  //   return p.join(appDocDir.path, kDocumentsSubDir, document.fileName);
+  // }
+
+  Future<String> _encryptAndSaveFile(
+    String sourceFilePath,
+    String originalFileNameForExt,
+  ) async {
+    if (!_isEncryptedDirInitialized) await _initEncryptedDocumentsDirectory();
+
+    final encrypter = _getEncrypter();
+    final iv = enc.IV.fromSecureRandom(16); // Generate a random IV
+
+    final fileBytes = await File(sourceFilePath).readAsBytes();
+    final encrypted = encrypter.encryptBytes(fileBytes, iv: iv);
+
+    // Prepend IV to the encrypted bytes: IV (16 bytes) + Ciphertext
+    final bytesToWrite = Uint8List.fromList(iv.bytes + encrypted.bytes);
+
+    // Use original file extension for the encrypted file for easier identification (optional)
+    // Or use a generic ".enc" extension
+    final extension = p.extension(originalFileNameForExt).isNotEmpty
+        ? p.extension(originalFileNameForExt)
+        : ".bin";
+    final uniqueEncryptedFileName = '${const Uuid().v4()}$extension';
+    final encryptedFilePath = p.join(
+      _encryptedDocumentsDirPath,
+      uniqueEncryptedFileName,
+    );
+
+    await File(encryptedFilePath).writeAsBytes(bytesToWrite);
+    if (kDebugMode) {
+      print("Encrypted and saved file to: $encryptedFilePath");
+    }
+    return encryptedFilePath;
   }
 
   Future<void> addDocument({
     required String originalFileName, // The name from the file picker
     required String
-    copiedFilePath, // The full path where the file was copied in kDocumentsSubDir
+    sourcePlatformPath, // The path from file picker (original unencrypted file)
     required int size,
     required DateTime addedOn,
     bool isLocked = false,
   }) async {
     await _setLoading(true);
+
+    // Encrypt and save the file, get the path to the encrypted version
+    final encryptedFilePath = await _encryptAndSaveFile(
+      sourcePlatformPath,
+      originalFileName,
+    );
+    final originalFileExt = p.extension(originalFileName);
+
     final box = Hive.box<DocumentItem>(_boxName);
-    final String actualFileName = p.basename(
-      copiedFilePath,
-    ); // e.g., "mydoc.pdf"
     final String id = const Uuid().v4(); // Generate a unique ID
 
     final newDocument = DocumentItem(
       // id: id, // If your DocumentItem has an ID field managed by HiveObject, it's often implicit
       name: originalFileName, // User-facing name
-      fileName: actualFileName, // File name for storage
+      fileName: encryptedFilePath, // Store the FULL PATH to the ENCRYPTED file
       size: size,
       addedOn: addedOn,
       isLocked: isLocked,
+      originalFileExtension: originalFileExt.isNotEmpty
+          ? originalFileExt
+          : null,
     );
-
-    // In a real app, you might encrypt the file at `copiedFilePath` here if it's not already
-    // The Hive box itself is encrypted, but the file on disk might need separate encryption.
 
     await box.put(id, newDocument); // Use a unique key for Hive, like an ID
     _documents.add(newDocument);
@@ -76,8 +153,8 @@ class DocumentProvider extends ChangeNotifier {
     final box = Hive.box<DocumentItem>(_boxName);
 
     try {
-      final filePath = await getFullPathForDocumentFile(document);
-      final file = File(filePath);
+      // document.fileName now holds the full path to the encrypted file
+      final file = File(document.fileName);
       if (await file.exists()) {
         await file.delete();
       }
@@ -149,20 +226,48 @@ class DocumentProvider extends ChangeNotifier {
   /// Gets the accessible path for a document.
   /// This might involve decryption to a temporary file in a real scenario.
   /// For now, it assumes the file in kDocumentsSubDir is directly usable.
+  // This method now handles decryption to a temporary file.
   Future<String> getAccessibleDocumentPath(DocumentItem document) async {
-    final String currentFullPath = await getFullPathForDocumentFile(document);
-    final File file = File(currentFullPath);
+    if (!_isEncryptedDirInitialized) await _initEncryptedDocumentsDirectory();
 
-    if (!await file.exists()) {
+    final encryptedFile = File(
+      document.fileName,
+    ); // document.fileName is the path to the encrypted file
+
+    if (!await encryptedFile.exists()) {
       throw Exception(
-        "Document file '${document.fileName}' not found at $currentFullPath.",
+        "Encrypted document file '${p.basename(document.fileName)}' not found at ${document.fileName}.",
       );
     }
-    // If files in kDocumentsSubDir need decryption to a temp location before opening:
-    // 1. Decrypt `currentFullPath` to a temporary file.
-    // 2. Return the path to the temporary decrypted file.
-    // For now, returning the direct path:
-    return currentFullPath;
+
+    final encrypter = _getEncrypter();
+    final fileBytesWithIv = await encryptedFile.readAsBytes();
+
+    if (fileBytesWithIv.length < 16) {
+      // IV is 16 bytes
+      throw Exception(
+        "Encrypted file is too short to contain IV: ${document.fileName}",
+      );
+    }
+
+    // Extract IV (first 16 bytes) and ciphertext
+    final iv = enc.IV(fileBytesWithIv.sublist(0, 16));
+    final ciphertextBytes = Uint8List.fromList(fileBytesWithIv.sublist(16));
+    final encryptedData = enc.Encrypted(ciphertextBytes);
+
+    final decryptedBytes = encrypter.decryptBytes(encryptedData, iv: iv);
+
+    final tempDir = await getTemporaryDirectory();
+    // Use original extension for the temp file
+    final tempFileName =
+        '${const Uuid().v4()}${document.originalFileExtension ?? p.extension(document.name) ?? ".tmp"}';
+    final tempFilePath = p.join(tempDir.path, tempFileName);
+
+    await File(tempFilePath).writeAsBytes(decryptedBytes);
+    if (kDebugMode) {
+      print("Decrypted document to temporary file: $tempFilePath");
+    }
+    return tempFilePath; // Path to the temporary DECRYPTED file
   }
 
   // Method to update the lastOpened field for a document item
@@ -186,6 +291,7 @@ class DocumentProvider extends ChangeNotifier {
       addedOn: item.addedOn,
       isLocked: item.isLocked,
       lastOpened: now, // Set lastOpened to current time
+      originalFileExtension: item.originalFileExtension, // Preserve extension
     );
 
     final box = Hive.box<DocumentItem>(_boxName);
@@ -216,8 +322,8 @@ class DocumentProvider extends ChangeNotifier {
     // Delete files from filesystem
     for (final document in _documents) {
       try {
-        final filePath = await getFullPathForDocumentFile(document);
-        final file = File(filePath);
+        // document.fileName is the full path to the encrypted file
+        final file = File(document.fileName);
         if (await file.exists()) {
           await file.delete();
         }

@@ -20,6 +20,8 @@ class DocumentItem extends HiveObject {
   bool isLocked;
   @HiveField(5) // New field for last opened date
   final DateTime? lastOpened;
+  @HiveField(6)
+  final String? originalFileExtension;
 
   DocumentItem({
     required this.name,
@@ -28,5 +30,6 @@ class DocumentItem extends HiveObject {
     required this.addedOn,
     this.isLocked = false, // Default to not locked
     this.lastOpened, // Optional parameter for flexibility
+    this.originalFileExtension,
   }); // Initialize with addedOn if not provided
 }

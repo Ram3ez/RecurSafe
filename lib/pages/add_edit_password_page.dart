@@ -135,6 +135,7 @@ class _AddEditPasswordPageState extends State<AddEditPasswordPage> {
               CupertinoTextField(
                 controller: controller,
                 placeholder: placeholder,
+                textAlign: TextAlign.end,
                 keyboardType: keyboardType,
                 obscureText: isPassword ? _obscurePassword : false,
                 textCapitalization: textCapitalization,
@@ -149,7 +150,7 @@ class _AddEditPasswordPageState extends State<AddEditPasswordPage> {
                         ), // Added right padding for the eye icon
                         child: CupertinoButton(
                           padding: const EdgeInsets.only(left: 8.0),
-                          minSize: 0,
+                          minimumSize: Size.zero,
                           child: Icon(
                             _obscurePassword
                                 ? CupertinoIcons.eye_slash_fill
@@ -163,9 +164,10 @@ class _AddEditPasswordPageState extends State<AddEditPasswordPage> {
                         ),
                       )
                     : null,
-                padding: const EdgeInsets.symmetric(
-                  vertical: 12.0,
-                  horizontal: 0.0,
+                padding: const EdgeInsets.only(
+                  top: 12.0,
+                  bottom: 12.0,
+                  right: 8.0,
                 ), // Consistent padding
                 decoration: null, // Remove default border to blend with FormRow
               ),
