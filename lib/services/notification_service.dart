@@ -13,7 +13,7 @@ class NotificationService {
     // Initialize native plugin settings for Android.
     // Replace '@mipmap/ic_launcher' with your app's icon name if different.
     const AndroidInitializationSettings initializationSettingsAndroid =
-        AndroidInitializationSettings('@mipmap/ic_launcher');
+        AndroidInitializationSettings('@mipmap/launcher_icon');
 
     // Initialize native plugin settings for iOS.
     const DarwinInitializationSettings

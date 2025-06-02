@@ -1,6 +1,6 @@
 import "package:flutter/cupertino.dart";
 import "package:intl/intl.dart";
-import "package:flutter/services.dart"; // For Clipboard
+import "package:flutter/services.dart"; // For Clipboard and HapticFeedback
 import "package:provider/provider.dart";
 import "package:recursafe/items/document_item.dart";
 import "package:recursafe/items/password_item.dart";
@@ -8,8 +8,8 @@ import "package:recursafe/providers/document_provider.dart";
 import "package:recursafe/providers/password_provider.dart";
 import "package:recursafe/utils/file_utils.dart";
 import 'package:recursafe/services/auth_service.dart'; // Import AuthService
-import 'package:recursafe/utils/dialog_utils.dart';
-import 'package:recursafe/pages/add_edit_password_page.dart'; // For navigation
+//import 'package:recursafe/utils/dialog_utils.dart';
+//import 'package:recursafe/pages/add_edit_password_page.dart'; // For navigation
 
 class CustomItem extends StatefulWidget {
   const CustomItem({
@@ -93,10 +93,9 @@ class _CustomItemState extends State<CustomItem> {
         GestureDetector(
           onLongPress: !widget.isEditing
               ? () {
-                  if (isDocument) {
+                  // Only show context menu for documents
+                  if (isDocument && widget.documentItem != null) {
                     _showDocumentContextMenu(context, widget.documentItem!);
-                  } else if (widget.passwordItem != null) {
-                    _showPasswordContextMenu(context, widget.passwordItem!);
                   }
                 }
               : null,
@@ -264,6 +263,9 @@ class _CustomItemState extends State<CustomItem> {
       listen: false,
     );
 
+    // Add haptic feedback
+    HapticFeedback.mediumImpact();
+
     showCupertinoModalPopup<void>(
       context: itemContext, // Use the item's context to launch the modal
       builder: (BuildContext modalContext) => CupertinoActionSheet(
@@ -305,51 +307,6 @@ class _CustomItemState extends State<CustomItem> {
           child: const Text('Cancel'),
           onPressed: () {
             Navigator.pop(modalContext); // Pop using the modal's context
-          },
-        ),
-      ),
-    );
-  }
-
-  void _showPasswordContextMenu(
-    BuildContext itemContext,
-    PasswordItem passwordItem,
-  ) {
-    final passwordProvider = Provider.of<PasswordProvider>(
-      itemContext,
-      listen: false,
-    );
-
-    showCupertinoModalPopup<void>(
-      context: itemContext,
-      builder: (BuildContext modalContext) => CupertinoActionSheet(
-        title: Text(passwordItem.displayName),
-        message: Text(
-          "Username: ${passwordItem.userName}\nWebsite: ${passwordItem.websiteName}",
-        ),
-        actions: <CupertinoActionSheetAction>[
-          CupertinoActionSheetAction(
-            child: const Text('Edit Password'),
-            onPressed: () async {
-              Navigator.pop(modalContext); // Pop the action sheet
-              // Navigate to edit page
-              Navigator.of(itemContext).push(
-                CupertinoPageRoute(
-                  builder: (newContext) => ChangeNotifierProvider.value(
-                    value: passwordProvider, // Provide the existing instance
-                    child: AddEditPasswordPage(
-                      passwordItem: passwordItem,
-                    ),
-                  ),
-                ),
-              );
-            },
-          ),
-        ],
-        cancelButton: CupertinoActionSheetAction(
-          child: const Text('Cancel'),
-          onPressed: () {
-            Navigator.pop(modalContext);
           },
         ),
       ),
